@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useState, useEffect, useCallback } from "react";
 import {
   Box,
@@ -30,6 +31,11 @@ import {
   Alert,
   Snackbar,
   Checkbox,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  SelectChangeEvent,
 } from "@mui/material";
 import {
   Search as SearchIcon,
@@ -102,6 +108,23 @@ export default function BrandList() {
     severity: "success" as "success" | "error" | "info" | "warning",
   });
 
+  // Sorting state
+  const [sortOption, setSortOption] = useState<string>(params.orderBy || "createddateasc");
+
+  // Sorting options
+  const sortOptions = [
+    { value: "nameasc", label: "Name (A-Z)" },
+    { value: "namedesc", label: "Name (Z-A)" },
+    { value: "descriptionasc", label: "Description (A-Z)" },
+    { value: "descriptiondesc", label: "Description (Z-A)" },
+    { value: "isactiveasc", label: "Status (Inactive to Active)" },
+    { value: "isactivedesc", label: "Status (Active to Inactive)" },
+    { value: "createddateasc", label: "Created Date (Oldest First)" },
+    { value: "createddatedesc", label: "Created Date (Newest First)" },
+    { value: "updateddateasc", label: "Updated Date (Oldest First)" },
+    { value: "updateddatedesc", label: "Updated Date (Newest First)" },
+  ];
+
   // Debounced search handler
   const debouncedSearch = useCallback(
     debounce((value: string) => {
@@ -130,10 +153,11 @@ export default function BrandList() {
     }
   }, [isCreateFormOpen, selectedBrandId, selectedBrand]);
 
-  // Sync search input with params.search
+  // Sync search input and sort option with params
   useEffect(() => {
     setSearch(params.searchTerm || "");
-  }, [params.searchTerm]);
+    setSortOption(params.orderBy || "createddateasc");
+  }, [params.searchTerm, params.orderBy]);
 
   // Form validation
   const validateForm = () => {
@@ -168,6 +192,13 @@ export default function BrandList() {
       ...prev,
       [name]: checked,
     }));
+  };
+
+  const handleSortChange = (e: SelectChangeEvent<string>) => {
+    const value = e.target.value as string;
+    setSortOption(value);
+    dispatch(setParams({ orderBy: value }));
+    dispatch(setPageNumber(1));
   };
 
   // Copy ID handler
@@ -419,8 +450,8 @@ export default function BrandList() {
 
       {/* Main Content */}
       <Paper elevation={2} sx={{ p: 3, mb: 4 }}>
-        {/* Search and Add Button */}
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+        {/* Search, Sort, and Add Button */}
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3, gap: 2 }}>
           <TextField
             label="Search Brands"
             value={search}
@@ -444,6 +475,20 @@ export default function BrandList() {
             }}
             disabled={isFetching}
           />
+          <FormControl sx={{ width: "200px" }} size="small">
+            <InputLabel>Sort By</InputLabel>
+            <Select
+              value={sortOption}
+              onChange={handleSortChange}
+              label="Sort By"
+            >
+              {sortOptions.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
           <Box sx={{ display: "flex", gap: 1 }}>
             {selectedBrandIds.length > 0 && (
               <Button
@@ -542,7 +587,6 @@ export default function BrandList() {
                       variant="outlined"
                     />
                   </TableCell>
-        
                   <TableCell>
                     <Typography variant="body2">{formatDate(brand.createdDate)}</Typography>
                   </TableCell>
@@ -585,7 +629,7 @@ export default function BrandList() {
 
               {(!data?.items || data.items.length === 0) && (
                 <TableRow>
-                  <TableCell colSpan={9} align="center" sx={{ py: 3 }}>
+                  <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
                     <Typography variant="body1" color="textSecondary">
                       {search ? `No brands found for "${search}"` : "No brands found"}
                     </Typography>
@@ -707,11 +751,13 @@ export default function BrandList() {
             startIcon={<SaveIcon />}
             disabled={isCreating || isUpdating}
           >
-            {(isCreating || isUpdating)
-              ? <CircularProgress size={24} color="inherit" />
-              : selectedBrandId
-              ? "Update"
-              : "Create"}
+            {(isCreating || isUpdating) ? (
+              <CircularProgress size={24} color="inherit" />
+            ) : selectedBrandId ? (
+              "Update"
+            ) : (
+              "Create"
+            )}
           </Button>
         </DialogActions>
       </Dialog>

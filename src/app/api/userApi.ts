@@ -30,10 +30,20 @@ export const userApi = createApi({
       query: (userId) => `users/${userId}`,
       providesTags: ["Users"],
     }),
+
+    toggleUserDeactivation: builder.mutation<User, { userId: string; isDeactivated: boolean }>({
+      query: ({ userId, isDeactivated }) => ({
+        url: `users/${userId}/toggle-deactivation`,
+        method: "PUT",
+        params: { isDeactivated },
+      }),
+      invalidatesTags: ["Users"],
+    }),
   }),
 });
 
 export const {
   useFetchUsersQuery,
   useFetchUserByIdQuery,
+  useToggleUserDeactivationMutation,
 } = userApi;

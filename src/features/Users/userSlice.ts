@@ -6,13 +6,15 @@ interface UserState {
   selectedUserId: string | null;
   isCreateFormOpen: boolean;
   isDeleteDialogOpen: boolean;
+  selectedUserIds: string[];
 }
 
 const initialState: UserState = {
-  params: { pageNumber: 1, pageSize: 10 },
+  params: { pageNumber: 1, pageSize: 10, orderBy: "createddateasc" },
   selectedUserId: null,
   isCreateFormOpen: false,
   isDeleteDialogOpen: false,
+  selectedUserIds: [],
 };
 
 const userSlice = createSlice({
@@ -34,8 +36,11 @@ const userSlice = createSlice({
     setDeleteDialogOpen: (state, action: PayloadAction<boolean>) => {
       state.isDeleteDialogOpen = action.payload;
     },
+    setSelectedUserIds: (state, action: PayloadAction<string[]>) => {
+      state.selectedUserIds = action.payload;
+    },
     resetParams: (state) => {
-      state.params = { pageNumber: 1, pageSize: 10 };
+      state.params = { pageNumber: 1, pageSize: 10, orderBy: "createddateasc" };
     },
   },
 });
@@ -46,6 +51,7 @@ export const {
   setSelectedUserId,
   setCreateFormOpen,
   setDeleteDialogOpen,
+  setSelectedUserIds,
   resetParams,
 } = userSlice.actions;
 

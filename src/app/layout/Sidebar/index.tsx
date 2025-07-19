@@ -1,5 +1,5 @@
 import { Box, Drawer, List, Divider, IconButton, ListItem, ListItemButton, ListItemIcon, ListItemText } from "@mui/material";
-import { Category, Group, Inventory, ChevronLeft, ChevronRight, Logout, Loyalty, ColorLens, FormatSize } from "@mui/icons-material";
+import { Category, Group, Inventory, ChevronLeft, ChevronRight, Logout, Loyalty, ColorLens, FormatSize, ReceiptLong, Dashboard, Chat } from "@mui/icons-material";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../../store/store";
 import { setSidebarOpen } from "../uiSlice";
@@ -69,7 +69,7 @@ export default function SideBar() {
       </Box>
       <Divider />
       <List>
-        {["Customers", "Products", "Categories", "Brands", "Colors", "Sizes"].map((text) => (
+        {["Dashboard", "Customers", "Chats", "Orders", "Products", "Categories", "Brands", "Colors", "Sizes"].map((text) => (
           <ListItem key={text} disablePadding>
             <ListItemButton
               component={NavLink}
@@ -78,7 +78,7 @@ export default function SideBar() {
               onClick={isSmallScreen ? handleToggleSidebar : undefined}
             >
               <ListItemIcon sx={{ minWidth: 0, mr: openSideBar ? 3 : "auto" }}>
-                {text === "Customers" ? <Group /> : text === "Products" ? <Inventory /> : text === "Categories" ? <Category /> : text === "Brands" ? <Loyalty /> : text === "Colors" ? <ColorLens /> : <FormatSize />} 
+                {text === "Dashboard" ? <Dashboard /> : text === "Customers" ? <Group /> : text === "Chats" ? <Chat /> : text === "Orders" ? <ReceiptLong /> : text === "Products" ? <Inventory /> : text === "Categories" ? <Category /> : text === "Brands" ? <Loyalty /> : text === "Colors" ? <ColorLens /> : <FormatSize />} 
               </ListItemIcon>
               <ListItemText primary={text} sx={{ opacity: openSideBar ? 1 : 0 }} />
             </ListItemButton>

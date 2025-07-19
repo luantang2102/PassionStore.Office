@@ -3,4 +3,5 @@ export interface OrderParams {
   pageSize?: number;
   orderBy?: string;
   status?: string;
+  searchTerm?: string;
 }

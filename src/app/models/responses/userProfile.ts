@@ -1,11 +1,12 @@
-import { Address } from "./address";
-
 export interface UserProfile {
     id: string;
-    firstName: string | null;
-    lastName: string | null;
+    fullName: string | null;
     phoneNumber: string | null;
-    address: Address | null;
+    province: string | null;
+    district: string | null;
+    ward: string | null;
+    specificAddress: string | null;
+    isDefault: boolean;
     createdDate: string;
     updatedDate?: string;
 }

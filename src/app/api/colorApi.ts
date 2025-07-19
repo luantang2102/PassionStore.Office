@@ -11,28 +11,28 @@ export const colorApi = createApi({
   tagTypes: ["Colors"],
   endpoints: (builder) => ({
     fetchColors: builder.query<{ items: Color[]; pagination: PaginationParams | null }, ColorParams>({
-              query: (ColorParams) => ({
-                url: "Colors",
-                params: ColorParams,
-              }),
-              transformResponse: (response: Color[], meta) => {
-                const paginationHeader = meta?.response?.headers.get("Pagination");
-                const pagination = paginationHeader ? JSON.parse(paginationHeader) as PaginationParams : null;
-        
-                return {
-                  items: response,
-                  pagination,
-                };
-              },
-              providesTags: ["Colors"],
-            }),
-        fetchColorsTree: builder.query<Color[], void>({
-          query: () => ({
-            url: "Colors/tree",
-            method: "GET",
-          }),
-          providesTags: ["Colors"],
-        }),
+      query: (ColorParams) => ({
+        url: "Colors",
+        params: ColorParams,
+      }),
+      transformResponse: (response: Color[], meta) => {
+        const paginationHeader = meta?.response?.headers.get("Pagination");
+        const pagination = paginationHeader ? JSON.parse(paginationHeader) as PaginationParams : null;
+
+        return {
+          items: response,
+          pagination,
+        };
+      },
+      providesTags: ["Colors"],
+    }),
+    fetchColorsTree: builder.query<Color[], void>({
+      query: () => ({
+        url: "Colors/tree",
+        method: "GET",
+      }),
+      providesTags: ["Colors"],
+    }),
     fetchColorById: builder.query<Color, string>({
       query: (id) => ({
         url: `colors/${id}`,

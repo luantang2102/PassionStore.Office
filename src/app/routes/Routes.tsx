@@ -12,6 +12,8 @@ import SignIn from "../../features/Auth/SignIn";
 import ColorList from "../../features/Colors";
 import BrandList from "../../features/Brands";
 import SizeList from "../../features/Sizes";
+import OrderList from "../../features/Orders";
+import ChatList from "../../features/Chat";
 
 export const router = createBrowserRouter([
   {
@@ -29,6 +31,10 @@ export const router = createBrowserRouter([
       {
         path: "products",
         element: <ProtectedRoute><Products /></ProtectedRoute>,
+      },
+      {
+        path: "orders",
+        element: <ProtectedRoute><OrderList /></ProtectedRoute>,
       },
       {
         path: "categories",
@@ -49,6 +55,10 @@ export const router = createBrowserRouter([
       {
         path: "customers",
         element: <ProtectedRoute><Users /></ProtectedRoute>,
+      },
+      {
+        path: "chats",
+        element: <ProtectedRoute><ChatList /></ProtectedRoute>,
       },
       {
         path: "server-error",

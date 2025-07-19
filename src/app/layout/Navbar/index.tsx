@@ -5,7 +5,6 @@ import MuiAppBar, { AppBarProps as MuiAppBarProps } from '@mui/material/AppBar';
 import { NavLink } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../../store/store";
 import { setSidebarOpen, toggleDarkMode } from "../uiSlice";
-import Logo from "../../../assets/logo.png";
 import MoodButton from "../../../features/Gadgets/MoodButton";
 import Clock from "../../../features/Gadgets/Clock";
 
@@ -44,35 +43,45 @@ export default function NavBar() {
             <Toolbar variant='regular' sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Box display='flex' alignItems='center'>
                     <IconButton
-                    color="inherit"
-                    aria-label="open drawer"
-                    onClick={handleToggleSidebar}
-                    edge="start"
-                    sx={{ marginRight: 2 }}
+                        color="inherit"
+                        aria-label="open drawer"
+                        onClick={handleToggleSidebar}
+                        edge="start"
+                        sx={{ marginRight: 2 }}
                     >
-                    <Menu />
+                        <Menu />
                     </IconButton>
-                    <NavLink to="/">
-                    <Box
-                        sx={{
-                        display: "flex",
-                        justifyContent: "center",
-                        alignItems: "center",
-                        }}
-                    >
-                        <img
-                        src={Logo}
-                        alt="Logo"
-                        style={{
-                            maxWidth: "120px",
-                            maxHeight: "40px",
-                            objectFit: "contain",
-                        }}
-                        />
-                    </Box>
+                    <NavLink to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
+                        <Box
+                            sx={{
+                                display: "flex",
+                                justifyContent: "center",
+                                alignItems: "center",
+                                transition: 'transform 0.3s ease-in-out',
+                                '&:hover': {
+                                    transform: 'scale(1.05)',
+                                },
+                            }}
+                        >
+                            <div
+                                style={{
+                                    fontFamily: 'Arial, sans-serif',
+                                    fontSize: '2rem',
+                                    fontWeight: 'bold',
+                                    background: 'linear-gradient(to right, #3B82F6, #A855F7, #EC4899)',
+                                    WebkitBackgroundClip: 'text',
+                                    backgroundClip: 'text',
+                                    color: 'transparent',
+                                    textShadow: '2px 2px 4px rgba(0, 0, 0, 0.1)',
+                                    padding: '4px 8px',
+                                }}
+                            >
+                                Passion
+                            </div>
+                        </Box>
                     </NavLink>
                     <IconButton onClick={() => dispatch(toggleDarkMode())}>
-                    {darkMode ? <DarkMode /> : <LightMode />}
+                        {darkMode ? <DarkMode /> : <LightMode />}
                     </IconButton>
                 </Box>
 
@@ -80,7 +89,7 @@ export default function NavBar() {
                     <MoodButton />
                     <Clock />
                 </Box>
-                </Toolbar>
+            </Toolbar>
             {isLoading && (
                 <Box sx={{ width: '100%' }}>
                     <LinearProgress color='info' />

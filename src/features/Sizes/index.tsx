@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useState, useEffect, useCallback } from "react";
 import {
   Box,
@@ -30,6 +31,11 @@ import {
   Alert,
   Snackbar,
   Checkbox,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  SelectChangeEvent,
 } from "@mui/material";
 import {
   Search as SearchIcon,
@@ -100,6 +106,21 @@ export default function SizeList() {
     severity: "success" as "success" | "error" | "info" | "warning",
   });
 
+  // Sorting state
+  const [sortOption, setSortOption] = useState<string>(params.orderBy || "createddateasc");
+
+  // Sorting options
+  const sortOptions = [
+    { value: "nameasc", label: "Name (A-Z)" },
+    { value: "namedesc", label: "Name (Z-A)" },
+    { value: "isactiveasc", label: "Status (Inactive to Active)" },
+    { value: "isactivedesc", label: "Status (Active to Inactive)" },
+    { value: "createddateasc", label: "Created Date (Oldest First)" },
+    { value: "createddatedesc", label: "Created Date (Newest First)" },
+    { value: "updateddateasc", label: "Updated Date (Oldest First)" },
+    { value: "updateddatedesc", label: "Updated Date (Newest First)" },
+  ];
+
   // Debounced search handler
   const debouncedSearch = useCallback(
     debounce((value: string) => {
@@ -126,10 +147,11 @@ export default function SizeList() {
     }
   }, [isCreateFormOpen, selectedSizeId, selectedSize]);
 
-  // Sync search input with params.search
+  // Sync search input and sort option with params
   useEffect(() => {
     setSearch(params.searchTerm || "");
-  }, [params.searchTerm]);
+    setSortOption(params.orderBy || "createddateasc");
+  }, [params.searchTerm, params.orderBy]);
 
   // Form validation
   const validateForm = () => {
@@ -160,6 +182,13 @@ export default function SizeList() {
       ...prev,
       [name]: checked,
     }));
+  };
+
+  const handleSortChange = (e: SelectChangeEvent<string>) => {
+    const value = e.target.value as string;
+    setSortOption(value);
+    dispatch(setParams({ orderBy: value }));
+    dispatch(setPageNumber(1));
   };
 
   // Copy ID handler
@@ -409,8 +438,8 @@ export default function SizeList() {
 
       {/* Main Content */}
       <Paper elevation={2} sx={{ p: 3, mb: 4 }}>
-        {/* Search and Add Button */}
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+        {/* Search, Sort, and Add Button */}
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3, gap: 2 }}>
           <TextField
             label="Search Sizes"
             value={search}
@@ -434,6 +463,20 @@ export default function SizeList() {
             }}
             disabled={isFetching}
           />
+          <FormControl sx={{ width: "200px" }} size="small">
+            <InputLabel>Sort By</InputLabel>
+            <Select
+              value={sortOption}
+              onChange={handleSortChange}
+              label="Sort By"
+            >
+              {sortOptions.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
           <Box sx={{ display: "flex", gap: 1 }}>
             {selectedSizeIds.length > 0 && (
               <Button
@@ -520,7 +563,7 @@ export default function SizeList() {
                     <Typography variant="body2">{formatDate(size.createdDate)}</Typography>
                   </TableCell>
                   <TableCell>
-                    <Typography variant="body2">{formatDate(size.updatedDate !== undefined ? size.updatedDate : null)}</Typography>
+                    <Typography variant="body2">{formatDate(size.updatedDate ?? null)}</Typography>
                   </TableCell>
                   <TableCell align="center">
                     <Box sx={{ display: "flex", justifyContent: "center", gap: 1 }}>
@@ -558,7 +601,7 @@ export default function SizeList() {
 
               {(!data?.items || data.items.length === 0) && (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+                  <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
                     <Typography variant="body1" color="textSecondary">
                       {search ? `No sizes found for "${search}"` : "No sizes found"}
                     </Typography>
@@ -571,131 +614,131 @@ export default function SizeList() {
                         Clear Search
                       </Button>
                     )}
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
 
-        {/* Pagination */}
-        {data?.pagination && data.items.length > 0 && (
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mt: 3 }}>
-            <Typography variant="body2" color="textSecondary">
-              Showing {calculateStartIndex(data.pagination)} - {calculateEndIndex(data.pagination)} of{" "}
-              {data.pagination.totalCount} sizes
-            </Typography>
-            <Pagination
-              count={data.pagination.totalPages}
-              page={data.pagination.currentPage}
-              onChange={handlePageChange}
-              color="primary"
-              shape="rounded"
-            />
-          </Box>
-        )}
-      </Paper>
-
-      {/* Create/Edit Form Dialog */}
-      <Dialog open={isCreateFormOpen} onClose={handleCloseForm} fullWidth maxWidth="md">
-        <DialogTitle>
-          {selectedSizeId ? "Edit Size" : "Create New Size"}
-          <IconButton
-            aria-label="close"
-            onClick={handleCloseForm}
-            sx={{ position: "absolute", right: 8, top: 8 }}
-          >
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
-        <DialogContent dividers>
-          {isLoadingSize ? (
-            <Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
-              <CircularProgress />
+          {/* Pagination */}
+          {data?.pagination && data.items.length > 0 && (
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mt: 3 }}>
+              <Typography variant="body2" color="textSecondary">
+                Showing {calculateStartIndex(data.pagination)} - {calculateEndIndex(data.pagination)} of{" "}
+                {data.pagination.totalCount} sizes
+              </Typography>
+              <Pagination
+                count={data.pagination.totalPages}
+                page={data.pagination.currentPage}
+                onChange={handlePageChange}
+                color="primary"
+                shape="rounded"
+              />
             </Box>
-          ) : (
-            <Grid container spacing={3}>
-              {selectedSizeId && (
-                <Grid size={{ xs: 12 }}>
+          )}
+        </Paper>
+
+        {/* Create/Edit Form Dialog */}
+        <Dialog open={isCreateFormOpen} onClose={handleCloseForm} fullWidth maxWidth="md">
+          <DialogTitle>
+            {selectedSizeId ? "Edit Size" : "Create New Size"}
+            <IconButton
+              aria-label="close"
+              onClick={handleCloseForm}
+              sx={{ position: "absolute", right: 8, top: 8 }}
+            >
+              <CloseIcon />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent dividers>
+            {isLoadingSize ? (
+              <Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
+                <CircularProgress />
+              </Box>
+            ) : (
+              <Grid container spacing={3}>
+                {selectedSizeId && (
+                  <Grid size={{ xs: 12 }}>
+                    <TextField
+                      label="Size ID"
+                      fullWidth
+                      value={selectedSizeId}
+                      margin="normal"
+                      InputProps={{
+                        readOnly: true,
+                      }}
+                    />
+                  </Grid>
+                )}
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
-                    label="Size ID"
+                    name="name"
+                    label="Size Name"
                     fullWidth
-                    value={selectedSizeId}
+                    required
+                    value={formData.name || ""}
+                    onChange={handleInputChange}
                     margin="normal"
-                    InputProps={{
-                      readOnly: true,
-                    }}
+                    error={!!errors.name}
+                    helperText={errors.name}
                   />
                 </Grid>
-              )}
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  name="name"
-                  label="Size Name"
-                  fullWidth
-                  required
-                  value={formData.name || ""}
-                  onChange={handleInputChange}
-                  margin="normal"
-                  error={!!errors.name}
-                  helperText={errors.name}
-                />
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        name="isActive"
+                        checked={formData.isActive || false}
+                        onChange={handleSwitchChange}
+                        color="primary"
+                      />
+                    }
+                    label="Active"
+                  />
+                </Grid>
               </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      name="isActive"
-                      checked={formData.isActive || false}
-                      onChange={handleSwitchChange}
-                      color="primary"
-                    />
-                  }
-                  label="Active"
-                />
-              </Grid>
-            </Grid>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseForm}>Cancel</Button>
-          <Button
-            onClick={handleSaveSize}
-            variant="contained"
-            startIcon={<SaveIcon />}
-            disabled={isCreating || isUpdating}
-          >
-            {(isCreating || isUpdating) ? (
-              <CircularProgress size={24} color="inherit" />
-            ) : selectedSizeId ? (
-              "Update"
-            ) : (
-              "Create"
             )}
-          </Button>
-        </DialogActions>
-      </Dialog>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseForm}>Cancel</Button>
+            <Button
+              onClick={handleSaveSize}
+              variant="contained"
+              startIcon={<SaveIcon />}
+              disabled={isCreating || isUpdating}
+            >
+              {(isCreating || isUpdating) ? (
+                <CircularProgress size={24} color="inherit" />
+              ) : selectedSizeId ? (
+                "Update"
+              ) : (
+                "Create"
+              )}
+            </Button>
+          </DialogActions>
+        </Dialog>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={isDeleteDialogOpen} onClose={handleCloseDeleteDialog}>
-        <DialogTitle>Confirm Delete</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Are you sure you want to delete this size? This action cannot be undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDeleteDialog}>Cancel</Button>
-          <Button
-            onClick={handleConfirmDelete}
-            color="error"
-            variant="contained"
-            disabled={isDeleting}
-          >
-            {isDeleting ? <CircularProgress size={24} color="inherit" /> : "Delete"}
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
-  );
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={isDeleteDialogOpen} onClose={handleCloseDeleteDialog}>
+          <DialogTitle>Confirm Delete</DialogTitle>
+          <DialogContent>
+            <Typography>
+              Are you sure you want to delete this size? This action cannot be undone.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseDeleteDialog}>Cancel</Button>
+            <Button
+              onClick={handleConfirmDelete}
+              color="error"
+              variant="contained"
+              disabled={isDeleting}
+            >
+              {isDeleting ? <CircularProgress size={24} color="inherit" /> : "Delete"}
+            </Button>
+          </DialogActions>
+        </Dialog>
+      </Box>
+    );
 }

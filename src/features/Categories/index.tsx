@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useState, useEffect, useCallback } from "react";
 import {
   Box,
@@ -30,6 +31,12 @@ import {
   Alert,
   Snackbar,
   Checkbox,
+  Avatar,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  SelectChangeEvent,
 } from "@mui/material";
 import {
   Search as SearchIcon,
@@ -49,7 +56,6 @@ import {
   setSelectedCategoryId,
   setDeleteDialogOpen,
 } from "./categoriesSlice";
-import { useAppDispatch, useAppSelector } from "../../app/store/store";
 import {
   useFetchCategoriesQuery,
   useFetchCategoryByIdQuery,
@@ -61,6 +67,7 @@ import { format } from "date-fns";
 import { Category } from "../../app/models/responses/category";
 import { PaginationParams } from "../../app/models/params/pagination";
 import { debounce } from "lodash";
+import { useAppDispatch, useAppSelector } from "../../app/store/store";
 
 export default function CategoryList() {
   const dispatch = useAppDispatch();
@@ -88,13 +95,19 @@ export default function CategoryList() {
     description: "",
     isActive: true,
     parentCategoryId: null,
+    imageUrl: "",
   });
+
+  // File state for image upload
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   // Validation state
   const [errors, setErrors] = useState<{
     name?: string;
     description?: string;
     parentCategoryId?: string;
+    image?: string;
   }>({});
 
   // Notification state
@@ -103,6 +116,29 @@ export default function CategoryList() {
     message: "",
     severity: "success" as "success" | "error" | "info" | "warning",
   });
+
+  // Sorting state
+  const [sortOption, setSortOption] = useState<string>(params.orderBy || "createddateasc");
+
+  // Sorting options
+  const sortOptions = [
+    { value: "nameasc", label: "Name (A-Z)" },
+    { value: "namedesc", label: "Name (Z-A)" },
+    { value: "descriptionasc", label: "Description (A-Z)" },
+    { value: "descriptiondesc", label: "Description (Z-A)" },
+    { value: "levelasc", label: "Level (Low to High)" },
+    { value: "leveldesc", label: "Level (High to Low)" },
+    { value: "isactiveasc", label: "Status (Inactive to Active)" },
+    { value: "isactivedesc", label: "Status (Active to Inactive)" },
+    { value: "createddateasc", label: "Created Date (Oldest First)" },
+    { value: "createddatedesc", label: "Created Date (Newest First)" },
+    { value: "updateddateasc", label: "Updated Date (Oldest First)" },
+    { value: "updateddatedesc", label: "Updated Date (Newest First)" },
+    { value: "totalproductsasc", label: "Total Products (Low to High)" },
+    { value: "totalproductsdesc", label: "Total Products (High to Low)" },
+    { value: "parentcategorynameasc", label: "Parent Category (A-Z)" },
+    { value: "parentcategorynamedesc", label: "Parent Category (Z-A)" },
+  ];
 
   // Debounced search handler
   const debouncedSearch = useCallback(
@@ -121,7 +157,10 @@ export default function CategoryList() {
         description: selectedCategory.description,
         isActive: selectedCategory.isActive,
         parentCategoryId: selectedCategory.parentCategoryId,
+        imageUrl: selectedCategory.imageUrl,
       });
+      setImagePreview(selectedCategory.imageUrl || null);
+      setImageFile(null);
       setErrors({});
     } else if (isCreateFormOpen && !selectedCategoryId) {
       setFormData({
@@ -129,15 +168,33 @@ export default function CategoryList() {
         description: "",
         isActive: true,
         parentCategoryId: null,
+        imageUrl: "",
       });
+      setImagePreview(null);
+      setImageFile(null);
       setErrors({});
     }
   }, [isCreateFormOpen, selectedCategoryId, selectedCategory]);
 
-  // Sync search input with params.search
+  // Sync search input and sort option with params
   useEffect(() => {
     setSearch(params.searchTerm || "");
-  }, [params.searchTerm]);
+    setSortOption(params.orderBy || "createddateasc");
+  }, [params.searchTerm, params.orderBy]);
+
+  // Handle image file change
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setImageFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+      setErrors((prev) => ({ ...prev, image: undefined }));
+    }
+  };
 
   // Form validation
   const validateForm = () => {
@@ -156,6 +213,11 @@ export default function CategoryList() {
     // ParentCategoryId validation
     if (formData.parentCategoryId && !/^[a-zA-Z0-9-]+$/.test(formData.parentCategoryId)) {
       newErrors.parentCategoryId = "Parent Category ID must be alphanumeric or include hyphens.";
+    }
+
+    // Image validation
+    if (imageFile && imageFile.size > 5 * 1024 * 1024) {
+      newErrors.image = "Image size must be less than 5MB.";
     }
 
     setErrors(newErrors);
@@ -178,6 +240,13 @@ export default function CategoryList() {
       ...prev,
       [name]: checked,
     }));
+  };
+
+  const handleSortChange = (e: SelectChangeEvent<string>) => {
+    const value = e.target.value as string;
+    setSortOption(value);
+    dispatch(setParams({ orderBy: value }));
+    dispatch(setPageNumber(1));
   };
 
   // Copy ID handler
@@ -211,11 +280,11 @@ export default function CategoryList() {
 
     try {
       const categoryFormData = new FormData();
-
       if (formData.name) categoryFormData.append("name", formData.name);
       if (formData.description) categoryFormData.append("description", formData.description);
       categoryFormData.append("isActive", (formData.isActive ?? true).toString());
       if (formData.parentCategoryId) categoryFormData.append("parentCategoryId", formData.parentCategoryId);
+      if (imageFile) categoryFormData.append("image", imageFile);
 
       if (selectedCategoryId) {
         await updateCategory({ id: selectedCategoryId, data: categoryFormData }).unwrap();
@@ -345,7 +414,10 @@ export default function CategoryList() {
       description: "",
       isActive: true,
       parentCategoryId: null,
+      imageUrl: "",
     });
+    setImageFile(null);
+    setImagePreview(null);
     setErrors({});
   };
 
@@ -432,8 +504,8 @@ export default function CategoryList() {
 
       {/* Main Content */}
       <Paper elevation={2} sx={{ p: 3, mb: 4 }}>
-        {/* Search and Add Button */}
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+        {/* Search, Sort, and Add Button */}
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3, gap: 2 }}>
           <TextField
             label="Search Categories"
             value={search}
@@ -457,6 +529,20 @@ export default function CategoryList() {
             }}
             disabled={isFetching}
           />
+          <FormControl sx={{ width: "200px" }} size="small">
+            <InputLabel>Sort By</InputLabel>
+            <Select
+              value={sortOption}
+              onChange={handleSortChange}
+              label="Sort By"
+            >
+              {sortOptions.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
           <Box sx={{ display: "flex", gap: 1 }}>
             {selectedCategoryIds.length > 0 && (
               <Button
@@ -502,11 +588,13 @@ export default function CategoryList() {
                     onChange={handleSelectAllChange}
                   />
                 </TableCell>
+                <TableCell>Image</TableCell>
                 <TableCell>Name</TableCell>
                 <TableCell>Description</TableCell>
                 <TableCell>Level</TableCell>
                 <TableCell align="center">Status</TableCell>
                 <TableCell>Parent Category</TableCell>
+                <TableCell>Total Products</TableCell>
                 <TableCell>Created Date</TableCell>
                 <TableCell>Updated Date</TableCell>
                 <TableCell align="center">Actions</TableCell>
@@ -520,6 +608,13 @@ export default function CategoryList() {
                       checked={selectedCategoryIds.includes(category.id)}
                       onChange={() => handleCheckboxChange(category.id)}
                     />
+                  </TableCell>
+                  <TableCell>
+                    {category.imageUrl ? (
+                      <Avatar src={category.imageUrl} alt={category.name} sx={{ width: 40, height: 40, borderRadius: 1 }} />
+                    ) : (
+                      <Avatar sx={{ width: 40, height: 40, borderRadius: 1 }}>{category.name[0]}</Avatar>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Typography
@@ -566,6 +661,9 @@ export default function CategoryList() {
                     </Typography>
                   </TableCell>
                   <TableCell>
+                    <Typography variant="body2">{category.totalProducts}</Typography>
+                  </TableCell>
+                  <TableCell>
                     <Typography variant="body2">{formatDate(category.createdDate)}</Typography>
                   </TableCell>
                   <TableCell>
@@ -607,7 +705,7 @@ export default function CategoryList() {
 
               {(!data?.items || data.items.length === 0) && (
                 <TableRow>
-                  <TableCell colSpan={9} align="center" sx={{ py: 3 }}>
+                  <TableCell colSpan={10} align="center" sx={{ py: 3 }}>
                     <Typography variant="body1" color="textSecondary">
                       {search ? `No categories found for "${search}"` : "No categories found"}
                     </Typography>
@@ -729,6 +827,38 @@ export default function CategoryList() {
                   error={!!errors.parentCategoryId}
                   helperText={errors.parentCategoryId}
                 />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Box sx={{ mt: 2 }}>
+                  <Button
+                    variant="outlined"
+                    component="label"
+                    sx={{ textTransform: "none" }}
+                  >
+                    Upload Image
+                    <input
+                      type="file"
+                      accept="image/*"
+                      hidden
+                      onChange={handleImageChange}
+                    />
+                  </Button>
+                  {imagePreview && (
+                    <Box sx={{ mt: 2 }}>
+                      <Typography variant="body2">Image Preview:</Typography>
+                      <Avatar
+                        src={imagePreview}
+                        alt="Category Image Preview"
+                        sx={{ width: 250, height: 130, mt: 1, borderRadius: 1, objectFit: "cover" }}
+                      />
+                    </Box>
+                  )}
+                  {errors.image && (
+                    <Typography color="error" variant="body2" sx={{ mt: 1 }}>
+                      {errors.image}
+                    </Typography>
+                  )}
+                </Box>
               </Grid>
             </Grid>
           )}

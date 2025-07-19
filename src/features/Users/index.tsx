@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useState, useEffect, useCallback } from "react";
 import {
   Box,
@@ -27,28 +28,40 @@ import {
   Card,
   Divider,
   Tooltip,
+  Checkbox,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  SelectChangeEvent,
 } from "@mui/material";
 import {
   Search as SearchIcon,
   Refresh as RefreshIcon,
   Clear as ClearIcon,
-  ContentCopy,
+  ContentCopy as ContentCopyIcon,
+  AddCircle as AddCircleIcon,
+  Block as BlockIcon,
+  CheckCircle as CheckCircleIcon,
 } from "@mui/icons-material";
-import { setParams, setPageNumber } from "./userSlice";
+import { setParams, setPageNumber, setSelectedUserIds } from "./userSlice";
 import { useAppDispatch, useAppSelector } from "../../app/store/store";
-import { useFetchUsersQuery } from "../../app/api/userApi";
+import { useFetchUsersQuery, useToggleUserDeactivationMutation } from "../../app/api/userApi";
 import { format } from "date-fns";
 import { debounce } from "lodash";
 import { UserProfile } from "../../app/models/responses/userProfile";
 import { PaginationParams } from "../../app/models/params/pagination";
+import { User } from "../../app/models/responses/user";
 
 export default function UserList() {
   const dispatch = useAppDispatch();
-  const { params } = useAppSelector((state) => state.user);
+  const { params, selectedUserIds } = useAppSelector((state) => state.user);
   const { data, isLoading, error, refetch, isFetching } = useFetchUsersQuery(params);
+  const [toggleUserDeactivation, { isLoading: isToggling }] = useToggleUserDeactivationMutation();
   const [search, setSearch] = useState(params.searchTerm || "");
   const [selectedProfile, setSelectedProfile] = useState<UserProfile | null>(null);
   const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
+  const [sortOption, setSortOption] = useState<string>(params.orderBy || "createddateasc");
 
   // Notification state
   const [notification, setNotification] = useState({
@@ -57,19 +70,38 @@ export default function UserList() {
     severity: "success" as "success" | "error" | "info" | "warning",
   });
 
+  // Sorting options
+  const sortOptions = [
+    { value: "usernameasc", label: "Username (A-Z)" },
+    { value: "usernamedesc", label: "Username (Z-A)" },
+    { value: "emailasc", label: "Email (A-Z)" },
+    { value: "emaildesc", label: "Email (Z-A)" },
+    { value: "createddateasc", label: "Created Date (Oldest First)" },
+    { value: "createddatedesc", label: "Created Date (Newest First)" },
+    { value: "updateddateasc", label: "Updated Date (Oldest First)" },
+    { value: "updateddatedesc", label: "Updated Date (Newest First)" },
+    { value: "emailconfirmedasc", label: "Email Confirmed (False to True)" },
+    { value: "emailconfirmeddesc", label: "Email Confirmed (True to False)" },
+    { value: "isdeactivatedasc", label: "Status (Active to Deactivated)" },
+    { value: "isdeactivateddesc", label: "Status (Deactivated to Active)" },
+    { value: "rolesasc", label: "Roles (A-Z)" },
+    { value: "rolesdesc", label: "Roles (Z-A)" },
+  ];
+
   // Debounced search handler
   const debouncedSearch = useCallback(
     debounce((value: string) => {
       dispatch(setParams({ searchTerm: value.trim() || undefined }));
-      dispatch(setPageNumber(1)); // Reset to first page on new search
+      dispatch(setPageNumber(1));
     }, 500),
     [dispatch]
   );
 
-  // Sync search input with params.searchTerm
+  // Sync search input and sort option with params
   useEffect(() => {
     setSearch(params.searchTerm || "");
-  }, [params.searchTerm]);
+    setSortOption(params.orderBy || "createddateasc");
+  }, [params.searchTerm, params.orderBy]);
 
   // Search and pagination
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -88,8 +120,11 @@ export default function UserList() {
     dispatch(setPageNumber(page));
   };
 
-  const handleCloseNotification = () => {
-    setNotification({ ...notification, open: false });
+  const handleSortChange = (e: SelectChangeEvent<string>) => {
+    const value = e.target.value as string;
+    setSortOption(value);
+    dispatch(setParams({ orderBy: value }));
+    dispatch(setPageNumber(1));
   };
 
   // Profile click handler
@@ -124,7 +159,51 @@ export default function UserList() {
       });
   };
 
-  const formatDate = (dateString: string) => {
+  // Checkbox handlers
+  const handleCheckboxChange = (id: string) => {
+    dispatch(
+      setSelectedUserIds(
+        selectedUserIds.includes(id)
+          ? selectedUserIds.filter((cid) => cid !== id)
+          : [...selectedUserIds, id]
+      )
+    );
+  };
+
+  const handleSelectAllChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.checked) {
+      const allUserIds = data?.items.map((user) => user.id) || [];
+      dispatch(setSelectedUserIds(allUserIds));
+    } else {
+      dispatch(setSelectedUserIds([]));
+    }
+  };
+
+  // Toggle deactivation handler
+  const handleToggleDeactivation = async (user: User) => {
+    try {
+      await toggleUserDeactivation({ userId: user.id, isDeactivated: !user.isDeactivated }).unwrap();
+      setNotification({
+        open: true,
+        message: `User ${user.isDeactivated ? "activated" : "deactivated"} successfully`,
+        severity: "success",
+      });
+    } catch (err) {
+      console.error("Failed to toggle deactivation:", err);
+      setNotification({
+        open: true,
+        message: "Failed to toggle user deactivation",
+        severity: "error",
+      });
+    }
+  };
+
+  const handleCloseNotification = () => {
+    setNotification({ ...notification, open: false });
+  };
+
+  const formatDate = (dateString: string | undefined) => {
+    if (!dateString) return "N/A";
     try {
       return format(new Date(dateString), "MMM dd, yyyy HH:mm");
     } catch {
@@ -223,8 +302,8 @@ export default function UserList() {
 
       {/* Main Content */}
       <Paper elevation={2} sx={{ p: 3, mb: 4 }}>
-        {/* Search */}
-        <Box sx={{ display: "flex", justifyContent: "flex-start", mb: 3 }}>
+        {/* Search, Sort, and Add Button */}
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3, gap: 2 }}>
           <TextField
             label="Search Users"
             value={search}
@@ -248,6 +327,42 @@ export default function UserList() {
             }}
             disabled={isFetching}
           />
+          <FormControl sx={{ width: "200px" }} size="small">
+            <InputLabel>Sort By</InputLabel>
+            <Select
+              value={sortOption}
+              onChange={handleSortChange}
+              label="Sort By"
+            >
+              {sortOptions.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Box sx={{ display: "flex", gap: 1 }}>
+            {selectedUserIds.length > 0 && (
+              <Button
+                variant="contained"
+                color="error"
+                disabled={true}
+                startIcon={<ClearIcon />}
+                sx={{ borderRadius: "8px", textTransform: "none" }}
+              >
+                Delete Selected ({selectedUserIds.length})
+              </Button>
+            )}
+            <Button
+              variant="contained"
+              color="primary"
+              disabled={true}
+              startIcon={<AddCircleIcon />}
+              sx={{ borderRadius: "8px", textTransform: "none" }}
+            >
+              Add New User
+            </Button>
+          </Box>
         </Box>
 
         <Divider sx={{ mb: 2 }} />
@@ -257,22 +372,60 @@ export default function UserList() {
           <Table sx={{ minWidth: 650 }}>
             <TableHead>
               <TableRow>
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    checked={
+                      (data?.items?.length ?? 0) > 0 &&
+                      selectedUserIds.length === data?.items.length
+                    }
+                    indeterminate={
+                      selectedUserIds.length > 0 &&
+                      selectedUserIds.length < (data?.items.length ?? 0)
+                    }
+                    onChange={handleSelectAllChange}
+                  />
+                </TableCell>
                 <TableCell>Username</TableCell>
                 <TableCell>Email</TableCell>
+                <TableCell>Email Confirmed</TableCell>
+                <TableCell>Status</TableCell>
                 <TableCell>Roles</TableCell>
                 <TableCell>User Profiles</TableCell>
                 <TableCell>Created Date</TableCell>
-                <TableCell align="center">Action</TableCell>
+                <TableCell>Updated Date</TableCell>
+                <TableCell align="center">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {data?.items.map((user) => (
                 <TableRow key={user.id}>
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      checked={selectedUserIds.includes(user.id)}
+                      onChange={() => handleCheckboxChange(user.id)}
+                    />
+                  </TableCell>
                   <TableCell>
                     <Typography variant="body2">{user.userName || "N/A"}</Typography>
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2">{user.email || "N/A"}</Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={user.emailConfirmed ? "Verified" : "Unverified"}
+                      size="small"
+                      color={user.emailConfirmed ? "success" : "error"}
+                      variant="outlined"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Chip
+                      label={user.isDeactivated ? "Deactivated" : "Active"}
+                      size="small"
+                      color={user.isDeactivated ? "error" : "success"}
+                      variant="outlined"
+                    />
                   </TableCell>
                   <TableCell>
                     <Chip
@@ -290,6 +443,9 @@ export default function UserList() {
                   <TableCell>
                     <Typography variant="body2">{formatDate(user.createdDate)}</Typography>
                   </TableCell>
+                  <TableCell>
+                    <Typography variant="body2">{formatDate(user.updatedDate)}</Typography>
+                  </TableCell>
                   <TableCell align="center">
                     <Box sx={{ display: "flex", justifyContent: "center", gap: 1 }}>
                       <Tooltip title="Copy ID">
@@ -298,7 +454,21 @@ export default function UserList() {
                           color="inherit"
                           onClick={() => handleCopyId(user.id)}
                         >
-                          <ContentCopy fontSize="small" />
+                          <ContentCopyIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title={user.isDeactivated ? "Activate" : "Deactivate"}>
+                        <IconButton
+                          size="small"
+                          color={user.isDeactivated ? "success" : "error"}
+                          onClick={() => handleToggleDeactivation(user)}
+                          disabled={isToggling}
+                        >
+                          {user.isDeactivated ? (
+                            <CheckCircleIcon fontSize="small" />
+                          ) : (
+                            <BlockIcon fontSize="small" />
+                          )}
                         </IconButton>
                       </Tooltip>
                     </Box>
@@ -307,7 +477,7 @@ export default function UserList() {
               ))}
               {(!data?.items || data.items.length === 0) && (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
+                  <TableCell colSpan={9} align="center" sx={{ py: 3 }}>
                     <Typography variant="body1" color="textSecondary">
                       {search ? `No users found for "${search}"` : "No users found"}
                     </Typography>
@@ -323,104 +493,115 @@ export default function UserList() {
                   </TableCell>
                 </TableRow>
               )}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              </TableBody>
+            </Table>
+          </TableContainer>
 
-        {/* Pagination */}
-        {data?.pagination && data.items.length > 0 && (
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              mt: 3,
-            }}
-          >
-            <Typography variant="body2" color="textSecondary">
-              Showing {calculateStartIndex(data.pagination)} - {calculateEndIndex(data.pagination)} of{" "}
-              {data.pagination.totalCount} users
-            </Typography>
-            <Pagination
-              count={data.pagination.totalPages}
-              page={data.pagination.currentPage}
-              onChange={handlePageChange}
-              color="primary"
-              shape="rounded"
-            />
-          </Box>
-        )}
-      </Paper>
-
-      {/* User Profile Details Dialog */}
-      <Dialog open={isProfileDialogOpen} onClose={handleCloseProfileDialog} fullWidth maxWidth="sm">
-        <DialogTitle>User Profile Details</DialogTitle>
-        <DialogContent dividers>
-          {selectedProfile && (
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 12 }}>
-                <TextField
-                  label="Profile ID"
-                  fullWidth
-                  value={selectedProfile.id || "N/A"}
-                  InputProps={{ readOnly: true }}
-                  margin="normal"
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  label="First Name"
-                  fullWidth
-                  value={selectedProfile.firstName || "N/A"}
-                  InputProps={{ readOnly: true }}
-                  margin="normal"
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  label="Last Name"
-                  fullWidth
-                  value={selectedProfile.lastName || "N/A"}
-                  InputProps={{ readOnly: true }}
-                  margin="normal"
-                />
-              </Grid>
-              <Grid size={{ xs: 12 }}>
-                <TextField
-                  label="Phone Number"
-                  fullWidth
-                  value={selectedProfile.phoneNumber || "N/A"}
-                  InputProps={{ readOnly: true }}
-                  margin="normal"
-                />
-              </Grid>
-              <Grid size={{ xs: 12 }}>
-                <TextField
-                  label="Address"
-                  fullWidth
-                  value={selectedProfile.address ? 
-                          `${selectedProfile.address.street}, ${selectedProfile.address.city}, ${selectedProfile.address.state}, ${selectedProfile.address.postalCode}, ${selectedProfile.address.country}` 
-                          : "N/A"}
-                  InputProps={{ readOnly: true }}
-                  margin="normal"
-                />
-              </Grid>
-              <Grid size={{ xs: 12 }}>
-                <TextField
-                  label="Created Date"
-                  fullWidth
-                  value={formatDate(selectedProfile.createdDate)}
-                  InputProps={{ readOnly: true }}
-                  margin="normal"
-                />
-              </Grid>
-            </Grid>
+          {/* Pagination */}
+          {data?.pagination && data.items.length > 0 && (
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                mt: 3,
+              }}
+            >
+              <Typography variant="body2" color="textSecondary">
+                Showing {calculateStartIndex(data.pagination)} - {calculateEndIndex(data.pagination)} of{" "}
+                {data.pagination.totalCount} users
+              </Typography>
+              <Pagination
+                count={data.pagination.totalPages}
+                page={data.pagination.currentPage}
+                onChange={handlePageChange}
+                color="primary"
+                shape="rounded"
+              />
+            </Box>
           )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseProfileDialog}>Close</Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
-  );
+        </Paper>
+
+        {/* User Profile Details Dialog */}
+        <Dialog open={isProfileDialogOpen} onClose={handleCloseProfileDialog} fullWidth maxWidth="sm">
+          <DialogTitle>User Profile Details</DialogTitle>
+          <DialogContent dividers>
+            {selectedProfile && (
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    label="Profile ID"
+                    fullWidth
+                    value={selectedProfile.id || "N/A"}
+                    InputProps={{ readOnly: true }}
+                    margin="normal"
+                  />
+                </Grid>
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    label="Full Name"
+                    fullWidth
+                    value={selectedProfile.fullName || "N/A"}
+                    InputProps={{ readOnly: true }}
+                    margin="normal"
+                  />
+                </Grid>
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    label="Phone Number"
+                    fullWidth
+                    value={selectedProfile.phoneNumber || "N/A"}
+                    InputProps={{ readOnly: true }}
+                    margin="normal"
+                  />
+                </Grid>
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    label="Address"
+                    fullWidth
+                    value={
+                      selectedProfile.specificAddress
+                        ? `${selectedProfile.specificAddress}, ${selectedProfile.ward || ""}, ${selectedProfile.district || ""}, ${selectedProfile.province || ""}`
+                        : "N/A"
+                    }
+                    InputProps={{ readOnly: true }}
+                    margin="normal"
+                  />
+                </Grid>
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    label="Is Default"
+                    fullWidth
+                    value={selectedProfile.isDefault ? "Yes" : "No"}
+                    InputProps={{ readOnly: true }}
+                    margin="normal"
+                  />
+                </Grid>
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    label="Created Date"
+                    fullWidth
+                    value={formatDate(selectedProfile.createdDate)}
+                    InputProps={{ readOnly: true }}
+                    margin="normal"
+                  />
+                </Grid>
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    label="Updated Date"
+                    fullWidth
+                    value={formatDate(selectedProfile.updatedDate)}
+                    InputProps={{ readOnly: true }}
+                    margin="normal"
+                  />
+                </Grid>
+              </Grid>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseProfileDialog}>Close</Button>
+          </DialogActions>
+        </Dialog>
+      </Box>
+    );
 }

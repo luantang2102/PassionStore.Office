@@ -1,4 +1,3 @@
-// routes/ProtectedRoute.tsx
 import { Navigate } from "react-router-dom";
 import { useAppSelector } from "../store/store";
 import { JSX } from "react";
@@ -9,13 +8,18 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-  const { isAuthenticated: isAuthenticated, loading } = useAppSelector((state) => state.auth);
+  const { isAuthenticated, loading, user } = useAppSelector((state) => state.auth);
 
   if (loading) {
-    return <div><CircularProgress></CircularProgress></div>;
+    return (
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh" }}>
+        <CircularProgress />
+      </div>
+    );
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || !user?.roles?.includes("Admin")) {
+    console.log("ProtectedRoute: Redirecting to signin due to missing Admin role or unauthenticated state");
     return <Navigate to="/signin" replace />;
   }
 

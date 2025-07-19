@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Button, TextField, Typography, Box, CircularProgress } from "@mui/material";
 import { useForm, Controller } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
@@ -15,7 +16,7 @@ interface SignInForm {
 const SignIn = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
-  const { isAuthenticated: isAuthenticated } = useAppSelector((state) => state.auth);
+  const { isAuthenticated } = useAppSelector((state) => state.auth);
   const [login, { isLoading }] = useLoginMutation();
   const { control, handleSubmit, formState: { errors } } = useForm<SignInForm>({
     defaultValues: {
@@ -24,7 +25,7 @@ const SignIn = () => {
     },
   });
 
-  // Redirect authenticated users to dashboard in useEffect
+  // Redirect authenticated users to dashboard
   useEffect(() => {
     if (isAuthenticated) {
       navigate("/dashboard", { replace: true });
@@ -38,11 +39,14 @@ const SignIn = () => {
 
     try {
       const response = await login(formData).unwrap();
-      dispatch(setAuth(response));
-      navigate("/dashboard", { replace: true });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      console.log("Login response:", response);
+      if (response?.roles?.includes("Admin")) {
+        dispatch(setAuth(response));
+        navigate("/dashboard", { replace: true });
+      } else {
+        toast.error("Access denied");
+      }
     } catch (error: any) {
-      // Extract error message from RTK Query error
       let errorMessage = "Login failed. Please try again.";
       if (error.status === 400 || error.status === 401) {
         if (error.data?.title) {

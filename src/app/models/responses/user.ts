@@ -1,4 +1,3 @@
-import { Cart } from "./cart";
 import { Rating } from "./rating";
 import { UserProfile } from "./userProfile";
 
@@ -8,12 +7,14 @@ export interface User {
     imageUrl: string | null;
     publicId: string | null;
     email: string | null;
-    roles: string[];
-    isEmailVerified: boolean;
+    gender: string | null;
+    dateOfBirth: string | null;
     createdDate: string;
     updatedDate?: string;
+    emailConfirmed: boolean;
+    isDeactivated: boolean;
+    roles: string[];
     userProfiles: UserProfile[];
-    cart: Cart;
-    ratings : Rating[];
+    cartItemsCount: number;
+    ratings: Rating[];
 }
-

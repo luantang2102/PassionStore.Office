@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import { useState, useEffect, useCallback } from "react";
 import {
   Box,
@@ -30,6 +31,11 @@ import {
   Alert,
   Snackbar,
   Checkbox,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  SelectChangeEvent,
 } from "@mui/material";
 import {
   Search as SearchIcon,
@@ -102,8 +108,24 @@ export default function ColorList() {
     severity: "success" as "success" | "error" | "info" | "warning",
   });
 
+  // Sorting state
+  const [sortOption, setSortOption] = useState<string>(params.orderBy || "createddateasc");
+
+  // Sorting options
+  const sortOptions = [
+    { value: "nameasc", label: "Name (A-Z)" },
+    { value: "namedesc", label: "Name (Z-A)" },
+    { value: "hexcodeasc", label: "Hex Code (A-Z)" },
+    { value: "hexcodedesc", label: "Hex Code (Z-A)" },
+    { value: "isactiveasc", label: "Status (Inactive to Active)" },
+    { value: "isactivedesc", label: "Status (Active to Inactive)" },
+    { value: "createddateasc", label: "Created Date (Oldest First)" },
+    { value: "createddatedesc", label: "Created Date (Newest First)" },
+    { value: "updateddateasc", label: "Updated Date (Oldest First)" },
+    { value: "updateddatedesc", label: "Updated Date (Newest First)" },
+  ];
+
   // Debounced search handler
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const debouncedSearch = useCallback(
     debounce((value: string) => {
       dispatch(setParams({ searchTerm: value.trim() || undefined }));
@@ -131,10 +153,11 @@ export default function ColorList() {
     }
   }, [isCreateFormOpen, selectedColorId, selectedColor]);
 
-  // Sync search input with params.search
+  // Sync search input and sort option with params
   useEffect(() => {
     setSearch(params.searchTerm || "");
-  }, [params.searchTerm]);
+    setSortOption(params.orderBy || "createddateasc");
+  }, [params.searchTerm, params.orderBy]);
 
   // Form validation
   const validateForm = () => {
@@ -161,7 +184,7 @@ export default function ColorList() {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [name]: value,
+      [name]: name === "hexCode" ? value.toUpperCase() : value,
     }));
     setErrors((prev) => ({ ...prev, [name]: undefined }));
   };
@@ -172,6 +195,13 @@ export default function ColorList() {
       ...prev,
       [name]: checked,
     }));
+  };
+
+  const handleSortChange = (e: SelectChangeEvent<string>) => {
+    const value = e.target.value as string;
+    setSortOption(value);
+    dispatch(setParams({ orderBy: value }));
+    dispatch(setPageNumber(1));
   };
 
   // Copy ID handler
@@ -423,8 +453,8 @@ export default function ColorList() {
 
       {/* Main Content */}
       <Paper elevation={2} sx={{ p: 3, mb: 4 }}>
-        {/* Search and Add Button */}
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+        {/* Search, Sort, and Add Button */}
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3, gap: 2 }}>
           <TextField
             label="Search Colors"
             value={search}
@@ -448,6 +478,20 @@ export default function ColorList() {
             }}
             disabled={isFetching}
           />
+          <FormControl sx={{ width: "200px" }} size="small">
+            <InputLabel>Sort By</InputLabel>
+            <Select
+              value={sortOption}
+              onChange={handleSortChange}
+              label="Sort By"
+            >
+              {sortOptions.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
           <Box sx={{ display: "flex", gap: 1 }}>
             {selectedColorIds.length > 0 && (
               <Button
@@ -671,17 +715,54 @@ export default function ColorList() {
                 />
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  name="hexCode"
-                  label="Hex Code (e.g., #FF0000)"
-                  fullWidth
-                  required
-                  value={formData.hexCode || ""}
-                  onChange={handleInputChange}
-                  margin="normal"
-                  error={!!errors.hexCode}
-                  helperText={errors.hexCode}
-                />
+                <Box sx={{ display: "flex", alignItems: "center", gap: 2, mt: 2 }}>
+                  <TextField
+                    name="hexCode"
+                    label="Hex Code"
+                    required
+                    value={formData.hexCode || ""}
+                    onChange={handleInputChange}
+                    error={!!errors.hexCode}
+                    helperText={errors.hexCode}
+                    sx={{ flex: 1 }}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Box
+                            sx={{
+                              width: 20,
+                              height: 20,
+                              backgroundColor: formData.hexCode || "#000000",
+                              border: "1px solid #ccc",
+                              borderRadius: "4px",
+                            }}
+                          />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                  <TextField
+                    type="color"
+                    name="hexCode"
+                    value={formData.hexCode || "#000000"}
+                    onChange={handleInputChange}
+                    sx={{
+                      width: 60,
+                      height: 40,
+                      padding: 0,
+                      "& input": {
+                        width: "100%",
+                        height: "100%",
+                        padding: 0,
+                        border: "none",
+                        cursor: "pointer",
+                      },
+                    }}
+                    inputProps={{
+                      style: { padding: 0 },
+                    }}
+                  />
+                </Box>
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
                 <FormControlLabel
