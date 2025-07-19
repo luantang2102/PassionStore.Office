@@ -18,7 +18,7 @@ const SignIn = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const { isAuthenticated } = useAppSelector((state) => state.auth);
-  const [login, { isLoading, error }] = useLoginMutation();
+  const [login, { isLoading }] = useLoginMutation();
   const { control, handleSubmit, formState: { errors } } = useForm<SignInForm>({
     defaultValues: {
       email: "",
