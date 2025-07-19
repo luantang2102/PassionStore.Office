@@ -1,11 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { Button, TextField, Typography, Box, CircularProgress } from "@mui/material";
 import { useForm, Controller } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
 import { useAppDispatch, useAppSelector } from "../../../app/store/store";
 import { useLoginMutation } from "../../../app/api/authApi";
-import { setAuth } from "../authSlice";
-import { useEffect } from "react";
+import { setAuth, clearAuth } from "../authSlice";
+import { useEffect, useCallback } from "react";
 import { toast } from "react-toastify";
 
 interface SignInForm {
@@ -17,7 +18,7 @@ const SignIn = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const { isAuthenticated } = useAppSelector((state) => state.auth);
-  const [login, { isLoading }] = useLoginMutation();
+  const [login, { isLoading, error }] = useLoginMutation();
   const { control, handleSubmit, formState: { errors } } = useForm<SignInForm>({
     defaultValues: {
       email: "",
@@ -28,39 +29,45 @@ const SignIn = () => {
   // Redirect authenticated users to dashboard
   useEffect(() => {
     if (isAuthenticated) {
+      console.log("User is authenticated, redirecting to dashboard");
       navigate("/dashboard", { replace: true });
     }
   }, [isAuthenticated, navigate]);
 
-  const onSubmit = async (data: SignInForm) => {
-    const formData = new FormData();
-    formData.append("email", data.email);
-    formData.append("password", data.password);
+  const onSubmit = useCallback(
+    async (data: SignInForm) => {
+      const formData = new FormData();
+      formData.append("email", data.email);
+      formData.append("password", data.password);
 
-    try {
-      const response = await login(formData).unwrap();
-      console.log("Login response:", response);
-      if (response?.roles?.includes("Admin")) {
-        dispatch(setAuth(response));
-        navigate("/dashboard", { replace: true });
-      } else {
-        toast.error("Access denied");
-      }
-    } catch (error: any) {
-      let errorMessage = "Login failed. Please try again.";
-      if (error.status === 400 || error.status === 401) {
-        if (error.data?.title) {
-          errorMessage = error.data.title;
-        } else if (error.data?.errors) {
-          errorMessage = Object.values(error.data.errors).flat().join(", ");
-        } else if (typeof error.data === "string") {
-          errorMessage = error.data;
+      try {
+        const response = await login(formData).unwrap();
+        console.log("Login response:", response);
+        if (response?.roles?.includes("Admin")) {
+          dispatch(setAuth(response));
+          navigate("/dashboard", { replace: true });
+        } else {
+          dispatch(clearAuth());
+          toast.error("Access denied: Admin role required");
         }
+      } catch (error: any) {
+        dispatch(clearAuth());
+        let errorMessage = "Login failed. Please try again.";
+        if (error.status === 400 || error.status === 401) {
+          if (error.data?.title) {
+            errorMessage = error.data.title;
+          } else if (error.data?.errors) {
+            errorMessage = Object.values(error.data.errors).flat().join(", ");
+          } else if (typeof error.data === "string") {
+            errorMessage = error.data;
+          }
+        }
+        console.error("Login error:", error);
+        toast.error(errorMessage);
       }
-      toast.error(errorMessage);
-      console.error("Login failed:", error);
-    }
-  };
+    },
+    [dispatch, login, navigate]
+  );
 
   // Render nothing while redirecting
   if (isAuthenticated) {

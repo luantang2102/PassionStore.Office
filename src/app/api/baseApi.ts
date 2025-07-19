@@ -9,7 +9,7 @@ const mutex = new Mutex();
 const customBaseQuery = fetchBaseQuery({
   // baseUrl: "https://localhost:5001/api",
   baseUrl: "https://passionstore-hwajfcfqb8gbbng8.southeastasia-01.azurewebsites.net/api",
-  credentials: "include", // Send cookies with requests
+  credentials: "include",
 });
 
 interface ErrorResponse {
@@ -26,24 +26,36 @@ export const baseQueryWithErrorHandling = async (
   await mutex.waitForUnlock();
   api.dispatch(setLoading(true));
 
+  const url = typeof args === "string" ? args : args.url;
+  const isAuthEndpoint = url.toLowerCase().includes("auth/");
+  const isLoginEndpoint = url.toLowerCase() === "auth/login";
+
   let result = await customBaseQuery(args, api, extraOptions);
 
-  if (result.error && result.error.status === 401 && !api.endpoint.includes("auth/")) {
+  // Skip token refresh for auth endpoints
+  if (result.error && result.error.status === 401 && !isAuthEndpoint) {
     if (!mutex.isLocked()) {
       const release = await mutex.acquire();
       try {
+        console.log("401 error detected, attempting token refresh for endpoint:", url);
         const refreshResult = await customBaseQuery(
-          { url: "auth/refresh-token", method: "GET" },
+          { url: "Auth/refresh-token", method: "GET" }, // Match backend case
           api,
           extraOptions
         );
 
         if (refreshResult.data) {
+          console.log("Token refresh successful, retrying original request");
           result = await customBaseQuery(args, api, extraOptions);
         } else {
+          console.log("Token refresh failed:", refreshResult.error);
           toast.error("Session expired. Please log in again.");
-          router.navigate("/login");
+          router.navigate("/signin"); // Match redirect to /signin
         }
+      } catch (refreshError) {
+        console.log("Refresh token request failed:", refreshError);
+        toast.error("Session expired. Please log in again.");
+        router.navigate("/signin");
       } finally {
         release();
       }
@@ -71,13 +83,27 @@ export const baseQueryWithErrorHandling = async (
         } else if (resData.title) toast.error(resData.title);
         break;
       case 401:
-        if (resData.title) toast.error(resData.title);
+        if (isLoginEndpoint) {
+          console.log("Login failed with 401, passing error to component");
+          return result;
+        } else if (isAuthEndpoint) {
+          console.log("Auth endpoint failed with 401, skipping toast");
+          return result; // Let authSlice handle the error
+        } else if (resData.title) {
+          toast.error(resData.title);
+        }
         break;
       case 403:
         toast.error("You are not authorized to perform this action.");
         break;
       case 404:
-        if (resData.title) router.navigate("/not-found");
+        if (url === "Auth/refresh-token") {
+          console.log("Refresh token endpoint not found, redirecting to signin");
+          toast.error("Authentication service unavailable. Please log in again.");
+          router.navigate("/signin");
+        } else if (resData.title) {
+          router.navigate("/not-found");
+        }
         break;
       case 500:
         router.navigate("/server-error", { state: { error: resData } });

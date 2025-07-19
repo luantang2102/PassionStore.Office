@@ -19,11 +19,13 @@ const authSlice = createSlice({
   initialState,
   reducers: {
     setAuth: (state, action) => {
+      console.log("setAuth called with payload:", action.payload);
       state.isAuthenticated = true;
       state.user = action.payload;
       state.loading = false;
     },
     clearAuth: (state) => {
+      console.log("clearAuth called");
       state.isAuthenticated = false;
       state.user = null;
       state.loading = false;
@@ -34,7 +36,7 @@ const authSlice = createSlice({
     builder.addMatcher(
       authApi.endpoints.checkAuth.matchFulfilled,
       (state, { payload }) => {
-        console.log("checkAuth response:", payload); // Debug log
+        console.log("checkAuth response:", payload);
         if (payload?.roles?.includes("Admin")) {
           state.isAuthenticated = true;
           state.user = payload;
@@ -48,14 +50,14 @@ const authSlice = createSlice({
       }
     );
     builder.addMatcher(authApi.endpoints.checkAuth.matchRejected, (state, { error }) => {
-      console.log("checkAuth rejected:", error); // Debug log
+      console.log("checkAuth rejected:", error);
       state.isAuthenticated = false;
       state.user = null;
       state.loading = false;
     });
     // Handle login
     builder.addMatcher(authApi.endpoints.login.matchFulfilled, (state, { payload }) => {
-      console.log("login response:", payload); // Debug log
+      console.log("login response:", payload);
       if (payload?.roles?.includes("Admin")) {
         state.isAuthenticated = true;
         state.user = payload;
@@ -67,9 +69,15 @@ const authSlice = createSlice({
         state.loading = false;
       }
     });
+    builder.addMatcher(authApi.endpoints.login.matchRejected, (state, { error }) => {
+      console.log("login rejected:", error);
+      state.isAuthenticated = false;
+      state.user = null;
+      state.loading = false;
+    });
     // Handle register
     builder.addMatcher(authApi.endpoints.register.matchFulfilled, (state, { payload }) => {
-      console.log("register response:", payload); // Debug log
+      console.log("register response:", payload);
       if (payload?.roles?.includes("Admin")) {
         state.isAuthenticated = true;
         state.user = payload;
@@ -89,7 +97,7 @@ const authSlice = createSlice({
       state.loading = false;
     });
     builder.addMatcher(authApi.endpoints.logout.matchRejected, (state, { error }) => {
-      console.log("logout failed:", error); // Debug log
+      console.log("logout failed:", error);
       state.isAuthenticated = false;
       state.user = null;
       state.loading = false;

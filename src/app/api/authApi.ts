@@ -6,7 +6,6 @@ import { EmailRequest } from "../models/requests/emailRequest";
 import { VerifyEmailRequest } from "../models/requests/verifyEmailRequest";
 import { GoogleLoginRequest } from "../models/requests/googleLoginRequest";
 
-
 export const authApi = createApi({
   reducerPath: "authApi",
   baseQuery: baseQueryWithErrorHandling,
@@ -17,6 +16,7 @@ export const authApi = createApi({
         method: "POST",
         body: formData,
       }),
+      extraOptions: { maxRetries: 0 }, // Disable retries to prevent looping on 401
     }),
     register: builder.mutation<User, FormData>({
       query: (formData) => ({

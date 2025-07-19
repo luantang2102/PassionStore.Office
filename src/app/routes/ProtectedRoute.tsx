@@ -11,6 +11,7 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const { isAuthenticated, loading, user } = useAppSelector((state) => state.auth);
 
   if (loading) {
+    console.log("ProtectedRoute: Loading state, showing spinner");
     return (
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh" }}>
         <CircularProgress />
@@ -19,7 +20,7 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   }
 
   if (!isAuthenticated || !user?.roles?.includes("Admin")) {
-    console.log("ProtectedRoute: Redirecting to signin due to missing Admin role or unauthenticated state");
+    console.log("ProtectedRoute: Redirecting to signin, isAuthenticated:", isAuthenticated, "user roles:", user?.roles);
     return <Navigate to="/signin" replace />;
   }
 
