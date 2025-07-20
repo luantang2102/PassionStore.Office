@@ -1,56 +1,5 @@
 {
-    "routes": [
-        {
-            "src": "/",
-            "dest": "/"
-        },
-        {
-            "src": "/dashboard",
-            "dest": "/"
-        },
-        {
-            "src": "/products",
-            "dest": "/"
-        },
-        {
-            "src": "/orders",
-            "dest": "/"
-        },
-        {
-            "src": "/categories",
-            "dest": "/"
-        },
-        {
-            "src": "/colors",
-            "dest": "/"
-        },
-        {
-            "src": "/sizes",
-            "dest": "/"
-        },
-        {
-            "src": "/brands",
-            "dest": "/"
-        },
-        {
-            "src": "/customers",
-            "dest": "/"
-        },
-        {
-            "src": "/chats",
-            "dest": "/"
-        },
-        {
-            "src": "/server-error",
-            "dest": "/"
-        },
-        {
-            "src": "/not-found",
-            "dest": "/"
-        },
-        {
-            "src": "/.*",
-            "dest": "/"
-        }
+    "rewrites": [
+        {"source": "/(.*)", "destination": "/"}
     ]
 }
