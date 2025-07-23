@@ -14,6 +14,7 @@ export enum PaymentMethod {
 export interface Order {
   id: string;
   totalAmount: number;
+  senderFullName: string;
   status: string;
   orderDate: string;
   paymentMethod: PaymentMethod;

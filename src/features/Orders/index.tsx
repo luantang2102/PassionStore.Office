@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable prefer-const */
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Box,
   TextField,
@@ -36,7 +36,7 @@ import {
   SelectChangeEvent,
   Tabs,
   Tab,
-  Avatar,
+  Avatar
 } from "@mui/material";
 import {
   Search as SearchIcon,
@@ -56,6 +56,8 @@ import {
   SwapVert as ArrowUpDownIcon,
   CalendarToday as CalendarIcon,
   CreditCard as CreditCardIcon,
+  Receipt as ReceiptIcon,
+  Delete,
 } from "@mui/icons-material";
 import { useAppDispatch, useAppSelector } from "../../app/store/store";
 import {
@@ -64,6 +66,7 @@ import {
   useRequestReturnMutation,
   useUpdateReturnStatusMutation,
   useFetchValidStatusTransitionsQuery,
+  useDeleteCancelledOrderMutation,
 } from "../../app/api/orderApi";
 import { format } from "date-fns";
 import { Order } from "../../app/models/responses/order";
@@ -72,6 +75,8 @@ import { OrderStatusRequest } from "../../app/models/requests/orderStatusRequest
 import { ReturnRequest, ReturnStatusRequest } from "../../app/models/requests/returnRequest";
 import { debounce } from "lodash";
 import { setPageNumber, setParams, setReturnDialogOpen, setReturnReason, setSelectedOrderId } from "./orderSlice";
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
 
 // Status transition logic
 const statusTransitions = {
@@ -132,13 +137,66 @@ export default function OrderList() {
   const { params, selectedOrderId, isReturnDialogOpen, returnReason } = useAppSelector(
     (state) => state.order
   );
+  const { user } = useAppSelector((state) => state.auth);
   const { data, isLoading, error, refetch, isFetching } = useFetchAllOrdersQuery(params);
   const [updateOrderStatus, { isLoading: isUpdating }] = useUpdateOrderStatusMutation();
   const [requestReturn, { isLoading: isRequestingReturn }] = useRequestReturnMutation();
   const [updateReturnStatus, { isLoading: isUpdatingReturn }] = useUpdateReturnStatusMutation();
+  const [deleteCancelledOrder, { isLoading: isDeleting }] = useDeleteCancelledOrderMutation();
   const [sortBy, setSortBy] = useState("orderDate");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
-  
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [orderToDelete, setOrderToDelete] = useState<string | null>(null);
+  const [search, setSearch] = useState(params.searchTerm || "");
+  const [statusFilter, setStatusFilter] = useState<string>(params.status || "");
+  const [newReturnStatus, setNewReturnStatus] = useState<string>("");
+  const [refundReason, setRefundReason] = useState<string>("");
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [inputError, setInputError] = useState<string | null>(null);
+  const [localReturnReason, setLocalReturnReason] = useState<string>("");
+  const [isNewReturn, setIsNewReturn] = useState<boolean>(true);
+  const returnReasonInputRef = useRef<HTMLInputElement>(null);
+
+  const isAdmin = useMemo(() => user?.roles?.includes("Admin") || false, [user]);
+
+  const [notification, setNotification] = useState({
+    open: false,
+    message: "",
+    severity: "success" as "success" | "error" | "info" | "warning",
+  });
+
+  const debouncedSearch = useCallback(
+    debounce((value: string) => {
+      dispatch(setParams({ searchTerm: value.trim() || undefined }));
+      dispatch(setPageNumber(1));
+    }, 500),
+    [dispatch]
+  );
+
+  useEffect(() => {
+    setSearch(params.searchTerm || "");
+    setStatusFilter(params.status || "");
+  }, [params.searchTerm, params.status]);
+
+  useEffect(() => {
+    if (isReturnDialogOpen) {
+      setNewReturnStatus("");
+      setRefundReason("");
+      setInputError(null);
+      if (isNewReturn) {
+        setLocalReturnReason("");
+        dispatch(setReturnReason(""));
+        setTimeout(() => {
+          if (returnReasonInputRef.current) {
+            returnReasonInputRef.current.focus();
+          }
+        }, 0);
+      } else {
+        setLocalReturnReason(returnReason);
+      }
+    }
+  }, [isReturnDialogOpen, isNewReturn, returnReason, dispatch]);
+
   const filteredOrders = useMemo(() => {
     if (!data?.items) return [];
     let sorted = [...data.items];
@@ -149,6 +207,12 @@ export default function OrderList() {
         if (sortBy === "orderDate" || sortBy === "createdDate" || sortBy === "updatedDate") {
           aValue = new Date(aValue).getTime();
           bValue = new Date(bValue).getTime();
+        } else if (sortBy === "note" || sortBy === "senderFullName") {
+          aValue = aValue || "";
+          bValue = bValue || "";
+        } else if (sortBy === "recipientFullName") {
+          aValue = a.userProfile.fullName || "";
+          bValue = b.userProfile.fullName || "";
         }
         return sortOrder === "asc" ? (aValue > bValue ? 1 : -1) : (aValue < bValue ? 1 : -1);
       });
@@ -161,45 +225,113 @@ export default function OrderList() {
     { skip: !selectedOrderId || filteredOrders.find((o) => o.id === selectedOrderId)?.paymentMethod === "COD" }
   );
 
-  const [search, setSearch] = useState(params.searchTerm || "");
-  const [statusFilter, setStatusFilter] = useState<string>(params.status || "");
+  const handleExportXLS = () => {
+    if (!data?.items) return;
 
-  const [newReturnStatus, setNewReturnStatus] = useState<string>("");
-  const [refundReason, setRefundReason] = useState<string>("");
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+    const exportData = data.items.map((order) => ({
+      "Order ID": order.id,
+      Recipient: order.userProfile.fullName,
+      Sender: order.senderFullName || "N/A",
+      Status: statusConfig[order.status]?.label || order.status,
+      "Total Amount": order.totalAmount.toLocaleString("vi-VN", { style: "currency", currency: "VND" }),
+      "Order Date": formatDate(order.orderDate),
+      "Shipping Method": order.shippingMethod,
+      Items: order.orderItems.map((item) => `${item.productName} (x${item.quantity})`).join(", "),
+      Note: order.note || "N/A",
+      "Tracking Number": order.trackingNumber || "N/A",
+    }));
 
-  // Notification state
-  const [notification, setNotification] = useState({
-    open: false,
-    message: "",
-    severity: "success" as "success" | "error" | "info" | "warning",
-  });
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Orders");
+    XLSX.writeFile(workbook, `orders_export_${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+    setNotification({
+      open: true,
+      message: "Orders exported successfully",
+      severity: "success",
+    });
+  };
 
-  // Debounced search handler
-  const debouncedSearch = useCallback(
-    debounce((value: string) => {
-      dispatch(setParams({ searchTerm: value.trim() || undefined }));
-      dispatch(setPageNumber(1));
-    }, 500),
-    [dispatch]
-  );
+  const handleGenerateReceipt = (order: Order) => {
+    const doc = new jsPDF();
+    doc.setFontSize(16);
+    doc.text("Order Receipt", 20, 20);
+    
+    doc.setFontSize(12);
+    doc.text(`Order ID: ${order.id}`, 20, 30);
+    doc.text(`Recipient: ${order.userProfile.fullName}`, 20, 40);
+    doc.text(`Sender: ${order.senderFullName || "N/A"}`, 20, 50);
+    doc.text(`Status: ${statusConfig[order.status]?.label || order.status}`, 20, 60);
+    doc.text(`Order Date: ${formatDate(order.orderDate)}`, 20, 70);
+    doc.text(`Shipping Method: ${order.shippingMethod}`, 20, 80);
+    doc.text(`Total: ${order.totalAmount.toLocaleString("vi-VN", { style: "currency", currency: "VND" })}`, 20, 90);
 
-  // Sync search and status filter with params
-  useEffect(() => {
-    setSearch(params.searchTerm || "");
-    setStatusFilter(params.status || "");
-  }, [params.searchTerm, params.status]);
+    doc.setFontSize(14);
+    doc.text("Items:", 20, 100);
+    let yPos = 110;
+    order.orderItems.forEach((item, index) => {
+      doc.setFontSize(10);
+      doc.text(
+        `${index + 1}. ${item.productName} (x${item.quantity}) - ${item.price.toLocaleString("vi-VN", { style: "currency", currency: "VND" })}`,
+        20,
+        yPos
+      );
+      yPos += 10;
+      if (item.color?.name && item.color.name !== "None") {
+        doc.text(`   Color: ${item.color.name}`, 20, yPos);
+        yPos += 10;
+      }
+      if (item.size?.name && item.size.name !== "None") {
+        doc.text(`   Size: ${item.size.name}`, 20, yPos);
+        yPos += 10;
+      }
+    });
 
-  // Reset form data when dialogs open/close
-  useEffect(() => {
-    if (isReturnDialogOpen) {
-      setNewReturnStatus("");
-      setRefundReason("");
-      setReturnReason("");
+    doc.setFontSize(12);
+    doc.text(`Note: ${order.note || "N/A"}`, 20, yPos);
+    yPos += 10;
+    doc.text(`Tracking Number: ${order.trackingNumber || "N/A"}`, 20, yPos);
+
+    doc.save(`receipt_${order.id}_${format(new Date(), "yyyy-MM-dd")}.pdf`);
+    setNotification({
+      open: true,
+      message: "Receipt generated successfully",
+      severity: "success",
+    });
+  };
+
+  const handleDeleteClick = (orderId: string) => {
+    setOrderToDelete(orderId);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!orderToDelete) return;
+
+    try {
+      await deleteCancelledOrder(orderToDelete).unwrap();
+      setNotification({
+        open: true,
+        message: "Order deleted successfully",
+        severity: "success",
+      });
+      setDeleteDialogOpen(false);
+      setOrderToDelete(null);
+    } catch (err) {
+      console.error("Failed to delete order:", err);
+      setNotification({
+        open: true,
+        message: "Failed to delete order",
+        severity: "error",
+      });
     }
-  }, [isReturnDialogOpen]);
+  };
 
-  // Handlers
+  const handleDeleteDialogClose = () => {
+    setDeleteDialogOpen(false);
+    setOrderToDelete(null);
+  };
+
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearch(value);
@@ -279,11 +411,14 @@ export default function OrderList() {
   const handleReturnClick = (id: string, reason?: string) => {
     dispatch(setSelectedOrderId(id));
     dispatch(setReturnReason(reason || ""));
+    setIsNewReturn(false);
     dispatch(setReturnDialogOpen(true));
   };
 
   const handleRequestReturnClick = (id: string) => {
     dispatch(setSelectedOrderId(id));
+    dispatch(setReturnReason(""));
+    setIsNewReturn(true);
     dispatch(setReturnDialogOpen(true));
   };
 
@@ -295,11 +430,14 @@ export default function OrderList() {
     dispatch(setReturnDialogOpen(false));
     dispatch(setSelectedOrderId(null));
     dispatch(setReturnReason(""));
+    setLocalReturnReason("");
+    setIsNewReturn(true);
+    setInputError(null);
     setSelectedOrder(null);
   };
 
   const handleRequestReturn = async () => {
-    if (!selectedOrderId || !returnReason) {
+    if (!selectedOrderId || !localReturnReason) {
       setNotification({
         open: true,
         message: "Please provide a return reason.",
@@ -309,7 +447,8 @@ export default function OrderList() {
     }
 
     try {
-      const returnRequest: ReturnRequest = { reason: returnReason };
+      dispatch(setReturnReason(localReturnReason));
+      const returnRequest: ReturnRequest = { reason: localReturnReason };
       await requestReturn({ id: selectedOrderId, data: returnRequest }).unwrap();
       setNotification({
         open: true,
@@ -377,6 +516,11 @@ export default function OrderList() {
     return format(new Date(dateString), "MMM dd, yyyy HH:mm");
   };
 
+  const truncateNote = (note: string | null | undefined, maxLength: number = 50) => {
+    if (!note) return "N/A";
+    return note.length > maxLength ? `${note.substring(0, maxLength)}...` : note;
+  };
+
   const calculateStartIndex = (pagination: PaginationParams) => {
     return (pagination.currentPage - 1) * pagination.pageSize + 1;
   };
@@ -398,8 +542,8 @@ export default function OrderList() {
     const Icon = config.icon;
     const order = filteredOrders.find((o) => o.id === orderId);
     const validStatusTransitions = order
-      ? getValidTransitions(order) // Use local transitions for COD
-      : validTransitions || []; // Fallback to API transitions for PayOS
+      ? getValidTransitions(order)
+      : validTransitions || [];
 
     return (
       <FormControl sx={{ minWidth: 150 }} size="small">
@@ -441,7 +585,7 @@ export default function OrderList() {
           <Tabs value={tab} onChange={(_, newValue) => setTab(newValue)} sx={{ mb: 2 }}>
             <Tab value="overview" label="Overview" />
             <Tab value="items" label="Items" />
-            <Tab value="customer" label="Customer" />
+            <Tab value="customer" label="Recipient" />
             <Tab value="shipping" label="Shipping" />
           </Tabs>
           {tab === "overview" && (
@@ -512,7 +656,10 @@ export default function OrderList() {
                   <CardHeader title={<Typography variant="subtitle2">Notes</Typography>} />
                   <CardContent>
                     <Typography variant="body2">
-                      {order.note || order.returnReason || "No notes available"}
+                      {order.note ? `Order Note: ${order.note}` : ""}
+                      {order.note && order.returnReason ? <br /> : ""}
+                      {order.returnReason ? `Return Reason: ${order.returnReason}` : ""}
+                      {!order.note && !order.returnReason ? "No notes available" : ""}
                     </Typography>
                   </CardContent>
                 </Card>
@@ -568,15 +715,18 @@ export default function OrderList() {
           )}
           {tab === "customer" && (
             <Card>
-              <CardHeader title={<Typography variant="subtitle1">Customer Information</Typography>} />
+              <CardHeader title={<Typography variant="subtitle1">Recipient Information</Typography>} />
               <CardContent>
                 <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
                   <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
                     <Avatar>{order.userProfile.fullName?.split(" ").map((n) => n[0]).join("") || "N/A"}</Avatar>
                     <Box>
-                      <Typography variant="subtitle2">{order.userProfile.fullName}</Typography>
+                      <Typography variant="subtitle2">Recipient: {order.userProfile.fullName}</Typography>
                       <Typography variant="body2" color="text.secondary">
-                        {order.userProfile.phoneNumber}
+                        Phone: {order.userProfile.phoneNumber}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Sender: {order.senderFullName || "N/A"}
                       </Typography>
                     </Box>
                   </Box>
@@ -608,6 +758,7 @@ export default function OrderList() {
                       {order.userProfile.ward}, {order.userProfile.district}, {order.userProfile.province}
                     </Typography>
                     <Typography variant="body2">{order.shippingAddress}</Typography>
+                    <Typography variant="body2">Sender: {order.senderFullName || "N/A"}</Typography>
                   </Box>
                   <Box>
                     <Typography variant="subtitle2" sx={{ mb: 1 }}>
@@ -693,7 +844,9 @@ export default function OrderList() {
               <Select value={sortBy} onChange={(e) => handleSortChange(e.target.value)} label="Sort By">
                 <MenuItem value="orderDate">Date</MenuItem>
                 <MenuItem value="totalAmount">Total</MenuItem>
-                <MenuItem value="userProfile.fullName">Customer</MenuItem>
+                <MenuItem value="recipientFullName">Recipient</MenuItem>
+                <MenuItem value="senderFullName">Sender</MenuItem>
+                <MenuItem value="note">Note</MenuItem>
               </Select>
             </FormControl>
             <IconButton onClick={() => handleSortChange(sortBy)}>
@@ -704,93 +857,152 @@ export default function OrderList() {
             <Button
               variant="outlined"
               color="primary"
-              onClick={() => {}}
+              onClick={handleExportXLS}
               startIcon={<DownloadIcon />}
               sx={{ borderRadius: "8px", textTransform: "none" }}
             >
-              Export
+              Export XLS
             </Button>
           </Box>
         </Box>
         <Divider sx={{ mb: 2 }} />
         <TableContainer component={Paper} elevation={0} sx={{ mb: 2 }}>
-          <Table sx={{ minWidth: 650 }}>
+          <Table sx={{ minWidth: 750 }}>
             <TableHead>
               <TableRow>
-                <TableCell>Customer</TableCell>
+                <TableCell>Recipient</TableCell>
+                <TableCell>Sender</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Items</TableCell>
                 <TableCell>Shipping Method</TableCell>
                 <TableCell>Total</TableCell>
                 <TableCell>Date</TableCell>
+                <TableCell>Notes</TableCell>
                 <TableCell align="center">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredOrders.map((order) => (
-                <TableRow key={order.id}>
-                  <TableCell>
-                    <Box>
-                      <Typography variant="body2" sx={{ fontWeight: "medium" }}>
-                        {order.userProfile.fullName}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {order.userProfile.phoneNumber}
-                      </Typography>
-                    </Box>
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={order.status} orderId={order.id} />
-                  </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                      {order.orderItems.map((item, index) => (
-                        <Box key={index} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                          <Typography variant="body2">+ {item.productName}</Typography>
-                          {item.color?.name && item.color.name !== "None" && (
+              {filteredOrders.map((order) => {
+                const canRequestReturn = getValidTransitions(order).includes("ReturnRequested");
+                return (
+                  <TableRow key={order.id}>
+                    <TableCell>
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: "medium" }}>
+                          {order.userProfile.fullName}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {order.userProfile.phoneNumber}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2">{order.senderFullName || "N/A"}</Typography>
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={order.status} orderId={order.id} />
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                        {order.orderItems.map((item, index) => (
+                          <Box
+                            key={index}
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1,
+                              backgroundColor: index % 2 === 0 ? "#f5f7fa" : "#e3f2fd",
+                              borderRadius: 1,
+                              px: 1,
+                              py: 0.5,
+                            }}
+                          >
+                            <Box
+                              sx={{
+                                minWidth: 120,
+                                maxWidth: 180,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                cursor: "pointer",
+                              }}
+                              title={`${item.productName}
+                    Color: ${item.color?.name || "N/A"}
+                    Size: ${item.size?.name || "N/A"}
+                    Quantity: ${item.quantity}
+                    Price: ${item.price?.toLocaleString("vi-VN", { style: "currency", currency: "VND" })}`}
+                            >
+                              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                + {item.productName}
+                              </Typography>
+                            </Box>
+                            {item.color?.name && item.color.name !== "None" && (
+                              <Chip
+                                label={item.color.name}
+                                size="small"
+                                sx={{
+                                  backgroundColor: (theme) => theme.palette.augmentColor({ color: { main: item.color.hexCode } }).light,
+                                  color: item.color.hexCode === "#000000" ? "#fff" : "#000",
+                                }}
+                              />
+                            )}
+                            {item.size?.name && item.size.name !== "None" && (
+                              <Chip label={item.size.name} size="small" />
+                            )}
                             <Chip
-                              label={item.color.name}
+                              label={"x" + item.quantity}
                               size="small"
-                              sx={{ backgroundColor: item.color.hexCode, color: item.color.hexCode === "#000000" ? "#fff" : "#000" }}
+                              sx={{ backgroundColor: "#31ddc4ff", color: "#000" }}
                             />
-                          )}
-                          {item.size?.name && item.size.name !== "None" && (
-                            <Chip label={item.size.name} size="small" />
-                          )}
-                          <Chip
-                            label={"x" + item.quantity}
-                            size="small"
-                            sx={{ backgroundColor: "#31ddc4ff", color: "#000" }}
-                          />
-                        </Box>
-                      ))}
-                    </Box>
-                  </TableCell>
-                  <TableCell>{order.shippingMethod}</TableCell>
-                  <TableCell sx={{ fontWeight: "medium" }}>{order.totalAmount.toLocaleString("vi-VN", { style: "currency", currency: "VND" })}</TableCell>
-                  <TableCell>{formatDate(order.orderDate)}</TableCell>
-                  <TableCell align="center">
-                    <Box sx={{ display: "flex", justifyContent: "center", gap: 1 }}>
-                      <Button variant="outlined" size="small" onClick={() => handleViewOrder(order)}>
-                        <EyeIcon sx={{ fontSize: 16 }} />
-                      </Button>
-                      {order.status === "Delivered" && (
-                        <IconButton color="warning" onClick={() => handleRequestReturnClick(order.id)}>
-                          <ReturnIcon sx={{ fontSize: 16 }} />
-                        </IconButton>
-                      )}
-                      {(order.status === "ReturnRequested" || order.status === "Returned") && (
-                        <IconButton color="warning" onClick={() => handleReturnClick(order.id, order.returnReason)}>
-                          <ReturnIcon sx={{ fontSize: 16 }} />
-                        </IconButton>
-                      )}
-                    </Box>
-                  </TableCell>
-                </TableRow>
-              ))}
+                          </Box>
+                        ))}
+                      </Box>
+                    </TableCell>
+                    <TableCell>{order.shippingMethod}</TableCell>
+                    <TableCell sx={{ fontWeight: "medium" }}>{order.totalAmount.toLocaleString("vi-VN", { style: "currency", currency: "VND" })}</TableCell>
+                    <TableCell>{formatDate(order.orderDate)}</TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="text.secondary">
+                        {truncateNote(order.note)}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="center">
+                      <Box sx={{ display: "flex", justifyContent: "center", gap: 1 }}>
+                        <Button variant="outlined" size="small" onClick={() => handleViewOrder(order)}>
+                          <EyeIcon sx={{ fontSize: 16 }} />
+                        </Button>
+                        {canRequestReturn && (
+                          <IconButton color="warning" onClick={() => handleRequestReturnClick(order.id)}>
+                            <ReturnIcon sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        )}
+                        {(order.status === "ReturnRequested" || order.status === "Returned") && (
+                          <IconButton color="warning" onClick={() => handleReturnClick(order.id, order.returnReason)}>
+                            <ReturnIcon sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        )}
+                        {order.status === "Delivered" && (
+                          <IconButton color="info" onClick={() => handleGenerateReceipt(order)}>
+                            <ReceiptIcon sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        )}
+                        {isAdmin && order.status === "Cancelled" && (
+                          <IconButton
+                            color="error"
+                            onClick={() => handleDeleteClick(order.id)}
+                            disabled={isDeleting}
+                          >
+                            <Delete sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        )}
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
               {(!filteredOrders || filteredOrders.length === 0) && (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 3 }}>
+                  <TableCell colSpan={9} align="center" sx={{ py: 3 }}>
                     <Typography variant="body1" color="textSecondary">
                       {search ? `No orders found for "${search}"` : "No orders found"}
                     </Typography>
@@ -855,7 +1067,6 @@ export default function OrderList() {
 
   return (
     <Box sx={{ p: 3 }}>
-      {/* Notification */}
       <Snackbar
         open={notification.open}
         autoHideDuration={6000}
@@ -867,14 +1078,34 @@ export default function OrderList() {
         </Alert>
       </Snackbar>
 
-      {/* Main Content */}
       <OrdersView />
 
-      {/* Return Dialog */}
       <Dialog open={isReturnDialogOpen} onClose={handleCloseDialog} fullWidth maxWidth="sm">
-        <DialogTitle>{returnReason ? "Manage Return" : "Request Return"}</DialogTitle>
+        <DialogTitle>{isNewReturn ? "Request Return" : "Manage Return"}</DialogTitle>
         <DialogContent>
-          {returnReason ? (
+          {inputError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {inputError}
+            </Alert>
+          )}
+          {isNewReturn ? (
+            <TextField
+              inputRef={returnReasonInputRef}
+              label="Return Reason"
+              fullWidth
+              multiline
+              rows={3}
+              value={localReturnReason}
+              onChange={(e) => {
+                setLocalReturnReason(e.target.value);
+                setInputError(null);
+              }}
+              margin="normal"
+              required
+              error={!!inputError}
+              helperText={inputError}
+            />
+          ) : (
             <>
               <Typography variant="subtitle1" sx={{ mb: 2 }}>
                 Return Reason: {returnReason}
@@ -916,22 +1147,20 @@ export default function OrderList() {
                 />
               )}
             </>
-          ) : (
-            <TextField
-              label="Return Reason"
-              fullWidth
-              multiline
-              rows={3}
-              value={returnReason}
-              onChange={(e) => setReturnReason(e.target.value)}
-              margin="normal"
-              required
-            />
           )}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Cancel</Button>
-          {returnReason ? (
+          {isNewReturn ? (
+            <Button
+              onClick={handleRequestReturn}
+              variant="contained"
+              startIcon={<SaveIcon />}
+              disabled={isRequestingReturn || !localReturnReason}
+            >
+              {isRequestingReturn ? <CircularProgress size={24} /> : "Request Return"}
+            </Button>
+          ) : (
             <Button
               onClick={handleUpdateReturnStatus}
               variant="contained"
@@ -940,20 +1169,31 @@ export default function OrderList() {
             >
               {isUpdatingReturn ? <CircularProgress size={24} /> : "Update Return"}
             </Button>
-          ) : (
-            <Button
-              onClick={handleRequestReturn}
-              variant="contained"
-              startIcon={<SaveIcon />}
-              disabled={isRequestingReturn || !returnReason}
-            >
-              {isRequestingReturn ? <CircularProgress size={24} /> : "Request Return"}
-            </Button>
           )}
         </DialogActions>
       </Dialog>
 
-      {/* Order Details Dialog */}
+      <Dialog open={deleteDialogOpen} onClose={handleDeleteDialogClose} fullWidth maxWidth="sm">
+        <DialogTitle>Confirm Delete Order</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1">
+            Are you sure you want to delete this canceled order? This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteDialogClose}>Cancel</Button>
+          <Button
+            onClick={handleDeleteConfirm}
+            variant="contained"
+            color="error"
+            startIcon={isDeleting ? <CircularProgress size={24} /> : <Delete />}
+            disabled={isDeleting}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {selectedOrder && <OrderDetailsDialog order={selectedOrder} />}
     </Box>
   );

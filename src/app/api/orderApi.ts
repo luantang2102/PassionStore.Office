@@ -60,19 +60,17 @@ export const orderApi = createApi({
       Order,
       { id: string; data: ReturnRequest }
     >({
-      query: ({ id, data }) => ({
-        url: `Orders/${id}/return`,
-        method: "POST",
-        body: data,
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        transformBody: (body: ReturnRequest) => {
-          const formData = new FormData();
-          formData.append("Reason", body.reason);
-          return formData;
-        },
-      }),
+      query: ({ id, data }) => {
+        const params = new URLSearchParams({ Reason: data.reason });
+        return {
+          url: `Orders/${id}/return`,
+          method: "POST",
+          body: params,
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+        };
+      },
       invalidatesTags: ["Orders"],
     }),
     updateReturnStatus: builder.mutation<
@@ -102,6 +100,13 @@ export const orderApi = createApi({
       }),
       providesTags: ["Orders"],
     }),
+    deleteCancelledOrder: builder.mutation<void, string>({
+      query: (id) => ({
+        url: `Orders/${id}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Orders"],
+    }),
   }),
 });
 
@@ -113,4 +118,5 @@ export const {
   useRequestReturnMutation,
   useUpdateReturnStatusMutation,
   useFetchValidStatusTransitionsQuery,
+  useDeleteCancelledOrderMutation,
 } = orderApi;
