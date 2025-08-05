@@ -640,13 +640,13 @@ export default function ProductList() {
 
     if (formState.formData.formImages.length > 0) {
       const maxSize = 5 * 1024 * 1024;
-      const allowedTypes = ["image/jpeg", "image/png", "image/gif"];
+      const allowedTypes = ["image/jpeg", "image/png", "image/gif" , "image/webp" , "image/avif"];
       if (formState.formData.formImages.some((file) => file.size === 0)) {
         newErrors.formImages = "All uploaded images must have content.";
       } else if (formState.formData.formImages.some((file) => file.size > maxSize)) {
         newErrors.formImages = "Each image must be less than 5 MB.";
       } else if (formState.formData.formImages.some((file) => !allowedTypes.includes(file.type))) {
-        newErrors.formImages = "Only JPEG, PNG, and GIF images are allowed.";
+        newErrors.formImages = "Only JPEG, PNG, WEBP, AVIF and GIF images are allowed.";
       }
     }
 
@@ -1689,7 +1689,7 @@ export default function ProductList() {
                     type="file"
                     hidden
                     multiple
-                    accept="image/jpeg,image/png,image/gif"
+                    accept="image/jpeg,image/png,image/gif,image/webp,image/avif"
                     onChange={handleFileChange}
                   />
                 </Button>
