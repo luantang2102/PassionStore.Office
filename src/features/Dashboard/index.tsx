@@ -20,14 +20,7 @@ import {
   CircularProgress,
   Alert,
 } from "@mui/material";
-import {
-  ShoppingCart,
-  People,
-  Warning,
-  Store,
-  Download,
-  Money,
-} from "@mui/icons-material";
+import { ShoppingCart, Warning, Download, Money } from "@mui/icons-material";
 import { Bar } from "react-chartjs-2";
 import {
   Chart as ChartJS,
@@ -45,7 +38,6 @@ import {
   useGetSalesByMonthQuery,
   useGetOrderSummaryQuery,
   useGetStockByCategoryQuery,
-  useGetTopCustomersQuery,
 } from "../../app/api/dashboardApi";
 import { useFetchProductsQuery } from "../../app/api/productApi";
 
@@ -84,12 +76,6 @@ export default function Dashboard() {
   const { data: stockByCategory, isLoading: stockLoading, error: stockError } = useGetStockByCategoryQuery(undefined, {
     skip: currentTab !== "inventory",
   });
-  const { data: topCustomers, isLoading: customersLoading, error: customersError } = useGetTopCustomersQuery({ 
-    limit: 4,
-    ...dateRange,
-  }, {
-    skip: currentTab !== "customers",
-  });
 
   // Fetch products (optional, can remove if not needed)
   useFetchProductsQuery({ pageNumber: 1, pageSize: 100 }, {
@@ -98,6 +84,38 @@ export default function Dashboard() {
 
   const handleTabChange = (_: React.SyntheticEvent, newValue: string) => {
     setCurrentTab(newValue);
+  };
+
+  // Download report handler
+  const handleDownloadReport = () => {
+    if (!summaryData || !revenueByCategory || !inventoryAlerts) return;
+
+    const headers = [
+      "Metric,Value",
+      `Total Revenue,${summaryData.totalRevenue.toLocaleString("vi-VN", { style: "currency", currency: "VND" })}`,
+      `Revenue Change,${summaryData.revenueChange.toFixed(1)}%`,
+      `Active Orders,${summaryData.activeOrders.toLocaleString("vi-VN")}`,
+      `Orders Change,${summaryData.ordersChange}`,
+      `Out of Stock Products,${summaryData.outOfStockProducts}`,
+      `Out of Stock Change,${summaryData.outOfStockChange}`,
+      "",
+      "Revenue by Category,",
+      ...revenueByCategory.map(item => `${item.name},${item.sales.toLocaleString("vi-VN", { style: "currency", currency: "VND" })}`),
+      "",
+      "Inventory Alerts,",
+      ...inventoryAlerts.map(item => `${item.product} (${item.category}),${item.stock === 0 ? "Out of Stock" : `${item.stock} left`}`),
+    ];
+
+    const csvContent = headers.join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `dashboard_report_${new Date().toISOString().split("T")[0]}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   // Chart data
@@ -147,10 +165,13 @@ export default function Dashboard() {
           Business Dashboard
         </Typography>
         <Box sx={{ display: "flex", gap: 1 }}>
-          <Button variant="outlined" startIcon={<Store />} sx={{ textTransform: "none" }}>
-            View Store
-          </Button>
-          <Button variant="outlined" startIcon={<Download />} sx={{ textTransform: "none" }}>
+          <Button 
+            variant="outlined" 
+            startIcon={<Download />} 
+            sx={{ textTransform: "none" }}
+            onClick={handleDownloadReport}
+            disabled={summaryLoading || revenueLoading || alertsLoading}
+          >
             Download Report
           </Button>
         </Box>
@@ -160,7 +181,6 @@ export default function Dashboard() {
         <Tab value="overview" label="Overview" />
         <Tab value="sales" label="Sales" />
         <Tab value="inventory" label="Inventory" />
-        <Tab value="customers" label="Customers" />
       </Tabs>
 
       {currentTab === "overview" && (
@@ -207,23 +227,6 @@ export default function Dashboard() {
                       </span> from last month
                     </Typography>
                     <LinearProgress variant="determinate" value={65} sx={{ mt: 1 }} />
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", pb: 1 }}>
-                    <Typography variant="subtitle2">Total Customers Summary</Typography>
-                    <People sx={{ fontSize: 16, color: "text.secondary" }} />
-                  </CardContent>
-                  <CardContent>
-                    <Typography variant="h5" sx={{ fontWeight: "bold" }}>
-                      {summaryData.totalCustomers.toLocaleString("vi-VN")}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      <span style={{ color: summaryData.customersChange >= 0 ? "#16a34a" : "#dc2626" }}>
-                        {summaryData.customersChange.toFixed(1)}%
-                      </span> from last month
-                    </Typography>
-                    <LinearProgress variant="determinate" value={80} sx={{ mt: 1 }} />
                   </CardContent>
                 </Card>
                 <Card>
@@ -517,52 +520,6 @@ export default function Dashboard() {
                             />
                           </TableCell>
                           <TableCell>{item.stock === 0 ? "Out of Stock" : item.stock}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              )}
-            </CardContent>
-          </Card>
-        </Box>
-      )}
-
-      {currentTab === "customers" && (
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <Card>
-            <CardHeader>
-              <Typography variant="subtitle1">Top Customers List</Typography>
-              <Typography variant="body2" color="text.secondary">
-                High-value customers with their top purchased product
-              </Typography>
-            </CardHeader>
-            <CardContent>
-              <Typography variant="h6" sx={{ mb: 2, fontWeight: 500 }}>
-                High-Value Customers
-              </Typography>
-              {customersLoading && <CircularProgress />}
-              {customersError && <Alert severity="error">Error loading customer data</Alert>}
-              {topCustomers && (
-                <TableContainer component={Paper} elevation={0}>
-                  <Table>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Customer Name</TableCell>
-                        <TableCell>Orders</TableCell>
-                        <TableCell>Total Spent</TableCell>
-                        <TableCell>Top Product</TableCell>
-                        <TableCell>Last Purchase</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {topCustomers.map((customer, index) => (
-                        <TableRow key={index}>
-                          <TableCell sx={{ fontWeight: "medium" }}>{customer.name}</TableCell>
-                          <TableCell>{customer.orders}</TableCell>
-                          <TableCell>{customer.totalSpent.toLocaleString("vi-VN", { style: "currency", currency: "VND" })}</TableCell>
-                          <TableCell>{customer.topProduct}</TableCell>
-                          <TableCell>{customer.lastPurchase}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

@@ -36,7 +36,8 @@ import {
   SelectChangeEvent,
   Tabs,
   Tab,
-  Avatar
+  Avatar,
+  Tooltip,
 } from "@mui/material";
 import {
   Search as SearchIcon,
@@ -516,9 +517,9 @@ export default function OrderList() {
     return format(new Date(dateString), "MMM dd, yyyy HH:mm");
   };
 
-  const truncateNote = (note: string | null | undefined, maxLength: number = 50) => {
-    if (!note) return "N/A";
-    return note.length > maxLength ? `${note.substring(0, maxLength)}...` : note;
+  const truncateText = (text: string | null | undefined, maxLength: number = 50) => {
+    if (!text) return "N/A";
+    return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text;
   };
 
   const calculateStartIndex = (pagination: PaginationParams) => {
@@ -590,7 +591,7 @@ export default function OrderList() {
           </Tabs>
           {tab === "overview" && (
             <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 2 }}>
                 <Card>
                   <CardHeader title={<Typography variant="subtitle2">Order Status</Typography>} />
                   <CardContent>
@@ -681,8 +682,10 @@ export default function OrderList() {
                         alt={item.productName}
                         style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 4 }}
                       />
-                      <Box sx={{ flex: 1 }}>
-                        <Typography variant="subtitle2">{item.productName}</Typography>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography variant="subtitle2" sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {item.productName}
+                        </Typography>
                         <Box sx={{ display: "flex", gap: 1, mt: 1, mb: 2 }}>
                           {item.color?.name && item.color.name !== "None" && (
                             <Chip
@@ -798,15 +801,15 @@ export default function OrderList() {
         Order Management
       </Typography>
       <Paper elevation={2} sx={{ p: 3, mb: 4 }}>
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
-          <Box sx={{ display: "flex", flexDirection: { xs: "column", md: "row" }, gap: 2 }}>
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3, flexWrap: "wrap", gap: 2 }}>
+          <Box sx={{ display: "flex", flexDirection: { xs: "column", md: "row" }, gap: 2, flex: 1 }}>
             <TextField
               label="Search Orders"
               value={search}
               onChange={handleSearchChange}
               variant="outlined"
               size="small"
-              sx={{ width: "300px" }}
+              sx={{ width: { xs: "100%", md: "300px" } }}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -866,108 +869,147 @@ export default function OrderList() {
           </Box>
         </Box>
         <Divider sx={{ mb: 2 }} />
-        <TableContainer component={Paper} elevation={0} sx={{ mb: 2 }}>
-          <Table sx={{ minWidth: 750 }}>
+        <TableContainer component={Paper} elevation={0} sx={{ mb: 2, overflowX: "auto", maxWidth: "100%" }}>
+          <Table sx={{ minWidth: 1000, tableLayout: "fixed" }}>
             <TableHead>
               <TableRow>
-                <TableCell>Recipient</TableCell>
-                <TableCell>Sender</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Items</TableCell>
-                <TableCell>Shipping Method</TableCell>
-                <TableCell>Total</TableCell>
-                <TableCell>Date</TableCell>
-                <TableCell>Notes</TableCell>
-                <TableCell align="center">Actions</TableCell>
+                <TableCell sx={{ width: "10%", minWidth: 120 }}>Sender</TableCell>
+                <TableCell sx={{ width: "20%", minWidth: 200 }}>Status</TableCell>
+                <TableCell sx={{ width: "40%", minWidth: 300 }}>Items</TableCell>
+                <TableCell sx={{ width: "10%", minWidth: 120 }}>Shipping Method</TableCell>
+                <TableCell sx={{ width: "10%", minWidth: 100 }}>Total</TableCell>
+                <TableCell sx={{ width: "10%", minWidth: 140 }}>Date</TableCell>
+                <TableCell sx={{ width: "5%", minWidth: 50 }}>Notes</TableCell>
+                <TableCell sx={{ width: "15%", minWidth: 140 }} align="center">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {filteredOrders.map((order) => {
                 const canRequestReturn = getValidTransitions(order).includes("ReturnRequested");
+                const maxItemsToShow = 2;
+                const visibleItems = order.orderItems.slice(0, maxItemsToShow);
+                const hasMoreItems = order.orderItems.length > maxItemsToShow;
                 return (
                   <TableRow key={order.id}>
-                    <TableCell>
-                      <Box>
-                        <Typography variant="body2" sx={{ fontWeight: "medium" }}>
-                          {order.userProfile.fullName}
+                    <TableCell sx={{ maxWidth: 120, overflow: "hidden" }}>
+                      <Tooltip title={order.senderFullName || "N/A"}>
+                        <Typography
+                          variant="body2"
+                          sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        >
+                          {truncateText(order.senderFullName, 20)}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {order.userProfile.phoneNumber}
-                        </Typography>
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">{order.senderFullName || "N/A"}</Typography>
+                      </Tooltip>
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={order.status} orderId={order.id} />
                     </TableCell>
-                    <TableCell>
+                    <TableCell sx={{ maxWidth: 300, overflow: "hidden" }}>
                       <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                        {order.orderItems.map((item, index) => (
-                          <Box
+                        {visibleItems.map((item, index) => (
+                          <Tooltip
                             key={index}
-                            sx={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 1,
-                              backgroundColor: index % 2 === 0 ? "#f5f7fa" : "#e3f2fd",
-                              borderRadius: 1,
-                              px: 1,
-                              py: 0.5,
-                            }}
+                            title={`${item.productName}\nColor: ${item.color?.name || "N/A"}\nSize: ${item.size?.name || "N/A"}\nQuantity: ${item.quantity}\nPrice: ${item.price.toLocaleString("vi-VN", { style: "currency", currency: "VND" })}`}
                           >
                             <Box
                               sx={{
-                                minWidth: 120,
-                                maxWidth: 180,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 1,
+                                backgroundColor: index % 2 === 0 ? "#f5f7fa" : "#e3f2fd",
+                                borderRadius: 1,
+                                px: 1,
+                                py: 0.5,
                               }}
-                              title={`${item.productName}
-                    Color: ${item.color?.name || "N/A"}
-                    Size: ${item.size?.name || "N/A"}
-                    Quantity: ${item.quantity}
-                    Price: ${item.price?.toLocaleString("vi-VN", { style: "currency", currency: "VND" })}`}
                             >
-                              <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                                + {item.productName}
-                              </Typography>
-                            </Box>
-                            {item.color?.name && item.color.name !== "None" && (
-                              <Chip
-                                label={item.color.name}
-                                size="small"
+                              <Box
                                 sx={{
-                                  backgroundColor: (theme) => theme.palette.augmentColor({ color: { main: item.color.hexCode } }).light,
-                                  color: item.color.hexCode === "#000000" ? "#fff" : "#000",
+                                  minWidth: 100,
+                                  maxWidth: 150,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                  cursor: "pointer",
                                 }}
+                              >
+                                <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                  + {truncateText(item.productName, 20)}
+                                </Typography>
+                              </Box>
+                              {item.color?.name && item.color.name !== "None" && (
+                                <Chip
+                                  label={truncateText(item.color.name, 10)}
+                                  size="small"
+                                  sx={{
+                                    backgroundColor: (theme) => theme.palette.augmentColor({ color: { main: item.color.hexCode } }).light,
+                                    color: item.color.hexCode === "#000000" ? "#fff" : "#000",
+                                  }}
+                                />
+                              )}
+                              {item.size?.name && item.size.name !== "None" && (
+                                <Chip label={truncateText(item.size.name, 10)} size="small" />
+                              )}
+                              <Chip
+                                label={"x" + item.quantity}
+                                size="small"
+                                sx={{ backgroundColor: "#31ddc4ff", color: "#000" }}
                               />
-                            )}
-                            {item.size?.name && item.size.name !== "None" && (
-                              <Chip label={item.size.name} size="small" />
-                            )}
-                            <Chip
-                              label={"x" + item.quantity}
-                              size="small"
-                              sx={{ backgroundColor: "#31ddc4ff", color: "#000" }}
-                            />
-                          </Box>
+                            </Box>
+                          </Tooltip>
                         ))}
+                        {hasMoreItems && (
+                          <Tooltip
+                            title={order.orderItems
+                              .slice(maxItemsToShow)
+                              .map(
+                                (item) =>
+                                  `${item.productName}\nColor: ${item.color?.name || "N/A"}\nSize: ${item.size?.name || "N/A"}\nQuantity: ${item.quantity}`
+                              )
+                              .join("\n\n")}
+                          >
+                            <Typography variant="caption" color="primary" sx={{ cursor: "pointer" }}>
+                              + {order.orderItems.length - maxItemsToShow} more
+                            </Typography>
+                          </Tooltip>
+                        )}
                       </Box>
                     </TableCell>
-                    <TableCell>{order.shippingMethod}</TableCell>
-                    <TableCell sx={{ fontWeight: "medium" }}>{order.totalAmount.toLocaleString("vi-VN", { style: "currency", currency: "VND" })}</TableCell>
-                    <TableCell>{formatDate(order.orderDate)}</TableCell>
-                    <TableCell>
-                      <Typography variant="body2" color="text.secondary">
-                        {truncateNote(order.note)}
-                      </Typography>
+                    <TableCell sx={{ maxWidth: 120, overflow: "hidden" }}>
+                      <Tooltip title={order.shippingMethod}>
+                        <Typography
+                          variant="body2"
+                          sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        >
+                          {truncateText(order.shippingMethod, 20)}
+                        </Typography>
+                      </Tooltip>
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: "medium" }}>
+                      {order.totalAmount.toLocaleString("vi-VN", { style: "currency", currency: "VND" })}
+                    </TableCell>
+                    <TableCell sx={{ maxWidth: 140, overflow: "hidden" }}>
+                      <Tooltip title={formatDate(order.orderDate)}>
+                        <Typography
+                          variant="body2"
+                          sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        >
+                          {formatDate(order.orderDate)}
+                        </Typography>
+                      </Tooltip>
+                    </TableCell>
+                    <TableCell sx={{ maxWidth: 140, overflow: "hidden" }}>
+                      <Tooltip title={order.note || "N/A"}>
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        >
+                          {truncateText(order.note, 20)}
+                        </Typography>
+                      </Tooltip>
                     </TableCell>
                     <TableCell align="center">
-                      <Box sx={{ display: "flex", justifyContent: "center", gap: 1 }}>
+                      <Box sx={{ display: "flex", flexDirection: { xs: "column", sm: "row" }, justifyContent: "center", gap: 1 }}>
                         <Button variant="outlined" size="small" onClick={() => handleViewOrder(order)}>
                           <EyeIcon sx={{ fontSize: 16 }} />
                         </Button>
