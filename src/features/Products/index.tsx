@@ -456,13 +456,14 @@ export default function ProductList() {
     const defaultVariant = selectedProductData.productVariants.find(
       (v: ProductVariant) => v.color.name === "None" && v.size.name === "None"
     );
+    const isNotHadVariants = defaultVariant && selectedProductData.productVariants.length === 1;
     return {
       ...selectedProductData,
       categories: selectedProductData.categories || [],
       productImages: selectedProductData.productImages || [],
       productVariants: selectedProductData.productVariants || [],
       brand: selectedProductData.brand || { id: "", name: "" },
-      isNotHadVariants: defaultVariant && selectedProductData.productVariants.length === 1,
+      isNotHadVariants,
       defaultVariantPrice: defaultVariant?.price || 0,
       defaultVariantStockQuantity: defaultVariant?.stockQuantity || 0,
     };
@@ -548,7 +549,7 @@ export default function ProductList() {
         categoryIds: selectedProduct.categories.map((c) => c.id) || [],
         formImages: [],
         existingImages: selectedProduct.productImages.map((img) => ({ id: img.id })) || [],
-        isNotHadVariants: selectedProduct.isNotHadVariants || false,
+        isNotHadVariants: selectedProduct.isNotHadVariants ?? false,
         defaultVariantPrice: selectedProduct.defaultVariantPrice || 0,
         defaultVariantStockQuantity: selectedProduct.defaultVariantStockQuantity || 0,
       },
@@ -640,7 +641,7 @@ export default function ProductList() {
 
     if (formState.formData.formImages.length > 0) {
       const maxSize = 5 * 1024 * 1024;
-      const allowedTypes = ["image/jpeg", "image/png", "image/gif" , "image/webp" , "image/avif"];
+      const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/avif"];
       if (formState.formData.formImages.some((file) => file.size === 0)) {
         newErrors.formImages = "All uploaded images must have content.";
       } else if (formState.formData.formImages.some((file) => file.size > maxSize)) {
@@ -703,15 +704,15 @@ export default function ProductList() {
   };
 
   const handleSwitchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-  const { name, checked } = e.target;
-  
-  // Only show confirmation dialog for isNotHadVariants when switching to true and variants exist
-  if (name === "isNotHadVariants" && checked && selectedProductId && formState.productVariants.length > 0) {
-    setConfirmNoVariantsDialogOpen(true);
-    return;
-  }
+    const { name, checked } = e.target;
 
-  setFormState((prev) => {
+    // Only show confirmation dialog for isNotHadVariants when switching to true and variants exist
+    if (name === "isNotHadVariants" && checked && formState.productVariants.length > 0) {
+      setConfirmNoVariantsDialogOpen(true);
+      return;
+    }
+
+    setFormState((prev) => {
       // Base update for formData
       const updatedFormData = { ...prev.formData, [name]: checked };
 
@@ -727,6 +728,7 @@ export default function ProductList() {
         formData: updatedFormData,
         productVariants: updatedProductVariants,
         deletedVariantIds: updatedDeletedVariantIds,
+        errors: { ...prev.errors, variants: undefined },
       };
     });
   };
@@ -736,6 +738,7 @@ export default function ProductList() {
       ...prev,
       formData: { ...prev.formData, isNotHadVariants: true },
       productVariants: [],
+      deletedVariantIds: [...prev.deletedVariantIds, ...prev.productVariants.map((v) => v.id || "")],
     }));
     setConfirmNoVariantsDialogOpen(false);
   };
@@ -785,6 +788,10 @@ export default function ProductList() {
         errors: { ...prev.errors, formImages: undefined },
       }));
     }
+  };
+
+  const handlePageChange = (_event: React.ChangeEvent<unknown>, page: number) => {
+    dispatch(setPageNumber(page));
   };
 
   const handleDeleteUploadedImage = (index: number) => {
@@ -1142,10 +1149,6 @@ export default function ProductList() {
     dispatch(setPageNumber(1));
   };
 
-  const handlePageChange = (_event: React.ChangeEvent<unknown>, page: number) => {
-    dispatch(setPageNumber(page));
-  };
-
   const handleCreateClick = useCallback(() => {
     dispatch(setSelectedProductId(null));
     dispatch(setCreateFormOpen(true));
@@ -1251,7 +1254,7 @@ export default function ProductList() {
   }
 
   return (
-    <Box sx={{ padding: 3, margin: "auto" }}>
+    <Box sx={{ padding: 3, margin: "auto", maxWidth: "100%" }}>
       <Snackbar
         open={notification.open}
         autoHideDuration={6000}
@@ -1278,7 +1281,7 @@ export default function ProductList() {
             onChange={handleSearchChange}
             variant="outlined"
             size="small"
-            sx={{ width: "300px", "& input": { paddingLeft: 4 } }}
+            sx={{ width: { xs: "100%", sm: "300px" }, "& input": { paddingLeft: 4 } }}
             InputProps={{
               startAdornment: <InputAdornment position="start"><SearchIcon /></InputAdornment>,
               endAdornment: search && (
@@ -1289,7 +1292,7 @@ export default function ProductList() {
             }}
             disabled={isFetching}
           />
-          <Box sx={{ display: "flex", gap: 1 }}>
+          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
             {selectedProductIds.length > 0 && (
               <Button
                 variant="contained"
@@ -1313,26 +1316,26 @@ export default function ProductList() {
           </Box>
         </Box>
 
-        <TableContainer component={Paper} elevation={0} sx={{ marginBottom: 2, border: 1, borderColor: "grey.300", borderRadius: 1 }}>
-          <Table sx={{ minWidth: 650 }}>
+        <TableContainer component={Paper} elevation={0} sx={{ overflowX: "auto", border: 1, borderColor: "grey.300", borderRadius: 1 }}>
+          <Table sx={{ minWidth: 1000, tableLayout: "auto" }}>
             <TableHead>
               <TableRow>
-                <TableCell padding="checkbox">
+                <TableCell padding="checkbox" sx={{ width: "5%" }}>
                   <Checkbox
                     checked={(data?.items?.length ?? 0) > 0 && selectedProductIds.length === data?.items.length}
                     indeterminate={selectedProductIds.length > 0 && selectedProductIds.length < (data?.items?.length ?? 0)}
                     onChange={handleSelectAllChange}
                   />
                 </TableCell>
-                <TableCell>Product Name</TableCell>
-                <TableCell>Brand</TableCell>
-                <TableCell>Price Range</TableCell>
-                <TableCell>Variants</TableCell>
-                <TableCell align="center">Stock Status</TableCell>
-                <TableCell align="center">Total Stock</TableCell>
-                <TableCell align="center">Rating</TableCell>
-                <TableCell>Categories</TableCell>
-                <TableCell align="center">Actions</TableCell>
+                <TableCell sx={{ width: "20%", whiteSpace: "normal" }}>Product Name</TableCell>
+                <TableCell sx={{ width: "15%", whiteSpace: "normal" }}>Brand</TableCell>
+                <TableCell sx={{ width: "15%" }}>Price Range</TableCell>
+                <TableCell sx={{ width: "10%" }}>Variants</TableCell>
+                <TableCell align="center" sx={{ width: "10%" }}>Stock Status</TableCell>
+                <TableCell align="center" sx={{ width: "10%" }}>Total Stock</TableCell>
+                <TableCell align="center" sx={{ width: "15%" }}>Rating</TableCell>
+                <TableCell sx={{ width: "15%", whiteSpace: "normal" }}>Categories</TableCell>
+                <TableCell align="center" sx={{ width: "10%" }}>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -1344,7 +1347,7 @@ export default function ProductList() {
                       onChange={() => handleCheckboxChange(product.id)}
                     />
                   </TableCell>
-                  <TableCell>
+                  <TableCell sx={{ whiteSpace: "normal" }}>
                     <Tooltip title={product.name}>
                       <Box sx={{ display: "flex", alignItems: "center" }}>
                         {product.productImages && product.productImages.length > 0 ? (
@@ -1370,29 +1373,22 @@ export default function ProductList() {
                             <InventoryIcon color="disabled" fontSize="small" />
                           </Box>
                         )}
-                        <Box>
+                        <Box sx={{ maxWidth: { xs: "100%", sm: "200px" } }}>
                           <Typography
                             variant="body1"
-                            sx={{ fontWeight: "medium", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                            sx={{ fontWeight: "medium", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "normal" }}
                           >
                             {product.name}
-                          </Typography>
-                          <Typography
-                            variant="body2"
-                            color="textSecondary"
-                            sx={{ maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                          >
-                            {product.description}
                           </Typography>
                         </Box>
                       </Box>
                     </Tooltip>
                   </TableCell>
-                  <TableCell>
+                  <TableCell sx={{ whiteSpace: "normal" }}>
                     <Tooltip title={product.brand.description || "N/A"}>
                       <Typography
                         variant="body2"
-                        sx={{ maxWidth: "150px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        sx={{ maxWidth: { xs: "100%", sm: "150px" }, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "normal" }}
                       >
                         {product.brand.name}
                       </Typography>
@@ -1414,7 +1410,7 @@ export default function ProductList() {
                       {getVariantCount(product)} variants
                     </Button>
                   </TableCell>
-                  <TableCell>
+                  <TableCell align="center">
                     <Chip
                       label={product.inStock ? "In Stock" : "Out of Stock"}
                       size="small"
@@ -1425,13 +1421,13 @@ export default function ProductList() {
                   <TableCell align="center">
                     <Typography variant="body2">{getTotalStock(product)}</Typography>
                   </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <TableCell align="center">
+                    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <Rating value={product.averageRating} precision={0.5} size="small" readOnly />
                       <Typography variant="body2" sx={{ marginLeft: 1 }}>({product.averageRating.toFixed(1)})</Typography>
                     </Box>
                   </TableCell>
-                  <TableCell>
+                  <TableCell sx={{ whiteSpace: "normal" }}>
                     <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
                       {product.categories.map((category) => (
                         <Chip
@@ -1445,7 +1441,7 @@ export default function ProductList() {
                     </Box>
                   </TableCell>
                   <TableCell align="center">
-                    <Box sx={{ display: "flex", justifyContent: "center", gap: 1 }}>
+                    <Box sx={{ display: "flex", justifyContent: "center", gap: 1, flexWrap: "wrap" }}>
                       <Tooltip title="Copy ID">
                         <IconButton size="small" color="inherit" onClick={() => handleCopyId(product.id)}>
                           <ContentCopyIcon fontSize="small" />
@@ -1472,7 +1468,7 @@ export default function ProductList() {
               ))}
               {(!data?.items || data.items.length === 0) && (
                 <TableRow>
-                  <TableCell colSpan={9} align="center" sx={{ paddingY: 3 }}>
+                  <TableCell colSpan={10} align="center" sx={{ paddingY: 3 }}>
                     <Typography variant="body1" color="textSecondary">
                       {search ? `No products found for "${search}"` : "No products found"}
                     </Typography>
@@ -1489,7 +1485,7 @@ export default function ProductList() {
         </TableContainer>
 
         {data?.pagination && data.items.length > 0 && (
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 3 }}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 3, flexWrap: "wrap" }}>
             <Typography variant="body2" color="textSecondary">
               Showing {calculateStartIndex(data.pagination)} - {calculateEndIndex(data.pagination)} of {data.pagination.totalCount} products
             </Typography>

@@ -4,6 +4,7 @@ import { ProductImage } from "./productImage";
 import { ProductVariant } from "./productVariant";
 
 export interface Product {
+    isNotHadVariants: any;
     id: string;
     name: string;
     description: string;
